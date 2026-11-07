@@ -69,7 +69,7 @@ def submit_cart_to_orchestrator(
     now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
     budget_day = time.strftime("%Y-%m-%d", time.gmtime(now))
 
-    with conn:
+    with transactional_session(conn):
         # 1. Check admission capacity
         check_and_admit_cart_reservation(conn, tenant_id, budget_day)
 
@@ -186,7 +186,7 @@ def approve_pending_purchase(
     now = time.time()
     now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
 
-    with conn:
+    with transactional_session(conn):
         cur = conn.execute("SELECT * FROM purchases WHERE id = ?;", (purchase_id,))
         purchase = cur.fetchone()
         if not purchase or purchase["status"] != PurchaseState.PENDING_APPROVAL.value:
@@ -298,7 +298,7 @@ def create_paypal_order_for_purchase(
     links = outcome.data.get("links", [])
     approval_url = next((l["href"] for l in links if l.get("rel") in ("payer-action", "approve")), None)
 
-    with conn:
+    with transactional_session(conn):
         conn.execute(
             """
             UPDATE purchases

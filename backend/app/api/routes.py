@@ -204,11 +204,22 @@ def get_approval_link(
 ):
     """Admin-only endpoint retrieving confidential PayPal buyer approval URL."""
     conn = get_thread_connection()
-    cur = conn.execute("SELECT approval_url FROM purchases WHERE id = ? AND tenant_id = ?;", (purchase_id, tenant_id))
+    cur = conn.execute(
+        "SELECT approval_url, paypal_order_id, expires_at FROM purchases WHERE id = ? AND tenant_id = ?;",
+        (purchase_id, tenant_id)
+    )
     r = cur.fetchone()
     if not r or not r["approval_url"]:
         raise HTTPException(status_code=404, detail="Approval URL not found or not yet generated.")
-    return AdminApprovalLinkDTO(purchase_id=purchase_id, approval_url=r["approval_url"])
+    expires_at = r["expires_at"]
+    if expires_at is not None:
+        expires_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(expires_at))
+    return AdminApprovalLinkDTO(
+        purchase_id=purchase_id,
+        paypal_order_id=r["paypal_order_id"],
+        approval_url=r["approval_url"],
+        expires_at=expires_at
+    )
 
 
 @api_router.post("/purchases/{purchase_id}/approve")
@@ -292,7 +303,7 @@ def freeze_policy(
     """Emergency Kill Switch: Activates Rule R0."""
     conn = get_thread_connection()
     now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    with conn:
+    with transactional_session(conn):
         conn.execute("UPDATE policy SET frozen = 1, updated_at = ? WHERE agent_id = ?;", (now_iso, agent_id))
     return {"agent_id": agent_id, "frozen": True}
 
@@ -305,7 +316,7 @@ def unfreeze_policy(
     """Deactivates Rule R0."""
     conn = get_thread_connection()
     now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    with conn:
+    with transactional_session(conn):
         conn.execute("UPDATE policy SET frozen = 0, updated_at = ? WHERE agent_id = ?;", (now_iso, agent_id))
     return {"agent_id": agent_id, "frozen": False}
 
