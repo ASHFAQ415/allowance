@@ -8,6 +8,7 @@ Enforces Invariant 1:
 """
 
 import json
+import os
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
@@ -508,4 +509,43 @@ class PayPalHttpClient(PayPalClientInterface):
                 error_class="TIMEOUT_OR_AMBIGUOUS_TRANSPORT",
                 raw_error=str(e)
             )
+
+
+_paypal_client_instance: Optional[PayPalClientInterface] = None
+
+
+def get_paypal_mode() -> str:
+    """Returns configured PAYPAL_MODE: 'mock' (default), 'sandbox', or 'live'."""
+    return os.environ.get("PAYPAL_MODE", "mock").strip().lower()
+
+
+def get_paypal_client() -> PayPalClientInterface:
+    """Returns PayPal client matching PAYPAL_MODE or injected instance."""
+    global _paypal_client_instance
+    if _paypal_client_instance is not None:
+        return _paypal_client_instance
+
+    mode = get_paypal_mode()
+    if mode in ("live", "sandbox"):
+        client_id = os.environ.get("PAYPAL_CLIENT_ID", "")
+        client_secret = os.environ.get("PAYPAL_CLIENT_SECRET", "")
+        base_url = os.environ.get("PAYPAL_BASE_URL", "")
+        env = "sandbox" if mode == "sandbox" or "sandbox" in base_url else "live"
+        return PayPalHttpClient(client_id=client_id, client_secret=client_secret, environment=env)
+
+    _paypal_client_instance = MockPayPalClient()
+    return _paypal_client_instance
+
+
+def set_paypal_client(client: Optional[PayPalClientInterface]) -> None:
+    """Explicitly injects or overrides PayPal client (useful for tests)."""
+    global _paypal_client_instance
+    _paypal_client_instance = client
+
+
+def reset_paypal_client() -> None:
+    """Resets cached PayPal client instance."""
+    global _paypal_client_instance
+    _paypal_client_instance = None
+
 

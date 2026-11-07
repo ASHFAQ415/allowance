@@ -24,30 +24,67 @@ from ..policy.rules import (
     PolicyConfig,
     evaluate,
 )
-from .state_machine import PurchaseState
+from .state_machine import (
+    EXPIRY_BUYER_APPROVED_SECONDS,
+    EXPIRY_ORDER_CREATED_SECONDS,
+    PurchaseState,
+)
 from .admission import check_and_admit_cart_reservation
 from ..paypal.client import PayPalClientInterface
-from .capture_lifecycle import execute_capture_flow, verify_order
+from .capture_lifecycle import execute_capture_flow, verify_order, VerificationError
+from .rechecks import (
+    get_agent_policy,
+    reevaluate_purchase,
+    release_purchase_reservation,
+)
 
 
-def get_agent_policy(conn: sqlite3.Connection, agent_id: str) -> Optional[PolicyConfig]:
-    """Retrieves current PolicyConfig for an agent from the policy table."""
-    cur = conn.execute("SELECT * FROM policy WHERE agent_id = ?;", (agent_id,))
-    row = cur.fetchone()
-    if not row:
-        return None
-    return PolicyConfig(
-        agent_id=row["agent_id"],
-        tenant_id=row["tenant_id"],
-        version=row["version"],
-        daily_budget_cents=row["daily_budget_cents"],
-        max_per_tx_cents=row["max_per_tx_cents"],
-        approval_threshold_cents=row["approval_threshold_cents"],
-        velocity_cap_cents=row["velocity_cap_cents"],
-        allowlist=set(json.loads(row["allowlist_json"])),
-        timezone=row["timezone"],
-        frozen=bool(row["frozen"])
+def _now_pair(now: float = None):
+    now = time.time() if now is None else now
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+    return now, now_iso
+
+
+def _block_purchase(
+    conn: sqlite3.Connection,
+    purchase: sqlite3.Row,
+    decision: Decision,
+    checkpoint: str,
+    actor: str,
+) -> None:
+    """BLOCKED transition plus reservation release and ledger entry."""
+    now, now_iso = _now_pair()
+    conn.execute(
+        """
+        UPDATE purchases
+        SET status = 'BLOCKED', status_reason = ?, state_entered_at = ?, expires_at = NULL, updated_at = ?
+        WHERE id = ? AND status = ?;
+        """,
+        (decision.reason, now, now_iso, purchase["id"], purchase["status"]),
     )
+    release_purchase_reservation(conn, purchase, actor=actor, source_suffix=f"{checkpoint}_deny_release")
+    conn.execute(
+        """
+        INSERT INTO ledger (
+            id, purchase_id, agent_id, from_state, to_state, rule_name,
+            reason, checkpoint, amount_cents, policy_version, actor, created_at
+        ) VALUES (?, ?, ?, ?, 'BLOCKED', ?, ?, ?, ?, ?, ?, ?);
+        """,
+        (
+            str(uuid.uuid4()),
+            purchase["id"],
+            purchase["agent_id"],
+            purchase["status"],
+            decision.rule_name,
+            decision.reason,
+            checkpoint,
+            purchase["total_cents"],
+            decision.policy_version,
+            actor,
+            now_iso,
+        ),
+    )
+
 
 
 def submit_cart_to_orchestrator(
@@ -183,8 +220,7 @@ def approve_pending_purchase(
     If DENY -> BLOCKED
     If ALLOW -> APPROVED
     """
-    now = time.time()
-    now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+    now, now_iso = _now_pair()
 
     with transactional_session(conn):
         cur = conn.execute("SELECT * FROM purchases WHERE id = ?;", (purchase_id,))
@@ -192,59 +228,23 @@ def approve_pending_purchase(
         if not purchase or purchase["status"] != PurchaseState.PENDING_APPROVAL.value:
             return PurchaseState.FAILED, "purchase_not_pending_approval"
 
-        policy = get_agent_policy(conn, purchase["agent_id"])
-        if not policy:
+        decision, policy = reevaluate_purchase(conn, purchase, Checkpoint.P2, now)
+        if decision is None or policy is None:
             return PurchaseState.FAILED, "policy_not_found"
-
-        # Checkpoint P2: Invariant 3 - Snapshot excludes current purchase reservation exactly once!
-        raw_snapshot = get_budget_snapshot(conn, purchase["agent_id"], purchase["budget_day"], purchase["currency"])
-        # Subtract current purchase reservation from snapshot for self-exclusion
-        p2_snapshot = type(raw_snapshot)(
-            agent_id=raw_snapshot.agent_id,
-            budget_day=raw_snapshot.budget_day,
-            currency=raw_snapshot.currency,
-            captured_cents=raw_snapshot.captured_cents,
-            reserved_cents=max(0, raw_snapshot.reserved_cents - purchase["total_cents"]),
-            unresolved_cents=raw_snapshot.unresolved_cents,
-            auto_approved_committed_cents=raw_snapshot.auto_approved_committed_cents,
-            version=raw_snapshot.version
-        )
-
-        from datetime import datetime, timezone
-        now_dt = datetime.fromtimestamp(now, tz=timezone.utc)
-        
-        # Build cart proxy for evaluation
-        from ..policy.rules import FrozenCart, CartItem
-        cart_proxy = FrozenCart(items=[], total_cents=purchase["total_cents"], cart_hash=purchase["cart_hash"], currency=purchase["currency"])
-        decision = evaluate(cart_proxy, policy, p2_snapshot, now_dt, Checkpoint.P2)
 
         if decision.outcome == Outcome.DENY:
             target_state = PurchaseState.BLOCKED
-            # Release reservation
-            record_financial_fact(
-                conn=conn,
-                source_event_key=f"p2_deny_release_{purchase_id}",
-                tenant_id=purchase["tenant_id"],
-                agent_id=purchase["agent_id"],
-                purchase_id=purchase_id,
-                budget_day=purchase["budget_day"],
-                fact_type=FactType.RESERVATION_RELEASED,
-                delta_reserved_cents=-purchase["total_cents"],
-                delta_unresolved_cents=0,
-                delta_captured_cents=0,
-                delta_auto_approved_cents=0,
-                actor=admin_actor
-            )
-        else:
-            target_state = PurchaseState.APPROVED
+            _block_purchase(conn, purchase, decision, "P2", admin_actor)
+            return target_state, decision.reason
 
+        target_state = PurchaseState.APPROVED
         conn.execute(
             """
             UPDATE purchases
-            SET status = ?, status_reason = ?, updated_at = ?
+            SET status = ?, status_reason = NULL, state_entered_at = ?, expires_at = NULL, updated_at = ?
             WHERE id = ? AND status = 'PENDING_APPROVAL';
             """,
-            (target_state.value, decision.reason if target_state == PurchaseState.BLOCKED else None, now_iso, purchase_id)
+            (target_state.value, now, now_iso, purchase_id)
         )
 
         conn.execute(
@@ -263,27 +263,75 @@ def approve_pending_purchase(
     return target_state, decision.reason
 
 
+def reject_pending_purchase(
+    conn: sqlite3.Connection,
+    purchase_id: str,
+    admin_actor: str = "admin"
+) -> Tuple[PurchaseState, str]:
+    """Admin rejection of a PENDING_APPROVAL purchase. PayPal is never called."""
+    now, now_iso = _now_pair()
+
+    with transactional_session(conn):
+        purchase = conn.execute("SELECT * FROM purchases WHERE id = ?;", (purchase_id,)).fetchone()
+        if not purchase or purchase["status"] != PurchaseState.PENDING_APPROVAL.value:
+            return PurchaseState.FAILED, "purchase_not_pending_approval"
+
+        updated = conn.execute(
+            """
+            UPDATE purchases
+            SET status = 'REJECTED', status_reason = 'admin_rejected',
+                state_entered_at = ?, expires_at = NULL, updated_at = ?
+            WHERE id = ? AND status = 'PENDING_APPROVAL';
+            """,
+            (now, now_iso, purchase_id)
+        )
+        if updated.rowcount != 1:
+            return PurchaseState.FAILED, "purchase_not_pending_approval"
+
+        release_purchase_reservation(conn, purchase, actor=admin_actor, source_suffix="reject_release")
+        conn.execute(
+            """
+            INSERT INTO ledger (
+                id, purchase_id, agent_id, from_state, to_state, rule_name,
+                reason, checkpoint, amount_cents, policy_version, actor, created_at
+            ) VALUES (?, ?, ?, 'PENDING_APPROVAL', 'REJECTED', 'ADMIN_REJECTED', 'Rejected by admin', 'P2', ?, 1, ?, ?);
+            """,
+            (str(uuid.uuid4()), purchase_id, purchase["agent_id"], purchase["total_cents"], admin_actor, now_iso)
+        )
+
+    return PurchaseState.REJECTED, "admin_rejected"
+
+
+
 def create_paypal_order_for_purchase(
     conn: sqlite3.Connection,
     purchase_id: str,
     paypal_client: PayPalClientInterface
 ) -> Tuple[PurchaseState, Optional[str]]:
     """
-    Evaluates Checkpoint P3 and invokes PayPal Orders v2 create_order.
-    Transitions purchase to PAYPAL_ORDER_CREATED and stores confidential approval_url.
+    Evaluates Checkpoint P3, then invokes PayPal Orders v2 create_order.
+    A P3 DENY transitions to BLOCKED and never calls PayPal.
     """
-    now = time.time()
-    now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+    now, now_iso = _now_pair()
 
-    cur = conn.execute("SELECT * FROM purchases WHERE id = ?;", (purchase_id,))
-    purchase = cur.fetchone()
+    purchase = conn.execute("SELECT * FROM purchases WHERE id = ?;", (purchase_id,)).fetchone()
     if not purchase:
         return PurchaseState.FAILED, "purchase_not_found"
 
     if purchase["status"] not in (PurchaseState.AUTO_APPROVED.value, PurchaseState.APPROVED.value):
+        # Idempotent: an already-created order returns its current state.
         return PurchaseState(purchase["status"]), "purchase_not_in_approved_state"
 
-    # Invoke PayPal Create Order
+    # P3: re-authorize against the current policy/budget before touching PayPal.
+    with transactional_session(conn):
+        decision, policy = reevaluate_purchase(conn, purchase, Checkpoint.P3, now)
+        if decision is None:
+            return PurchaseState(purchase["status"]), "policy_not_found"
+        if decision.outcome == Outcome.DENY:
+            _block_purchase(conn, purchase, decision, "P3", "system")
+            return PurchaseState.BLOCKED, decision.reason
+
+    # PayPal create is idempotent on the stable create_request_id stored at P1.
     outcome = paypal_client.create_order(
         create_request_id=purchase["create_request_id"],
         total_cents=purchase["total_cents"],
@@ -299,24 +347,196 @@ def create_paypal_order_for_purchase(
     approval_url = next((l["href"] for l in links if l.get("rel") in ("payer-action", "approve")), None)
 
     with transactional_session(conn):
-        conn.execute(
+        updated = conn.execute(
             """
             UPDATE purchases
-            SET status = 'PAYPAL_ORDER_CREATED', paypal_order_id = ?, approval_url = ?, updated_at = ?
+            SET status = 'PAYPAL_ORDER_CREATED', paypal_order_id = ?, approval_url = ?,
+                state_entered_at = ?, expires_at = ?, updated_at = ?
             WHERE id = ? AND status IN ('AUTO_APPROVED', 'APPROVED');
             """,
-            (order_id, approval_url, now_iso, purchase_id)
+            (
+                order_id, approval_url, now, now + EXPIRY_ORDER_CREATED_SECONDS, now_iso, purchase_id
+            )
         )
+
+        if updated.rowcount != 1:
+            current = conn.execute("SELECT status FROM purchases WHERE id = ?;", (purchase_id,)).fetchone()
+            return PurchaseState(current["status"]), "state_changed_before_order_recorded"
 
         conn.execute(
             """
             INSERT INTO ledger (
                 id, purchase_id, agent_id, from_state, to_state, rule_name,
                 reason, checkpoint, amount_cents, policy_version, actor, created_at
-            ) VALUES (?, ?, ?, ?, 'PAYPAL_ORDER_CREATED', 'ORDER_CREATED', 'PayPal Order v2 created', 'P3', ?, 1, 'system', ?);
+            ) VALUES (?, ?, ?, ?, 'PAYPAL_ORDER_CREATED', 'ORDER_CREATED', 'PayPal Order v2 created', 'P3', ?, ?, 'system', ?);
             """,
-            (str(uuid.uuid4()), purchase_id, purchase["agent_id"], purchase["status"], purchase["total_cents"], now_iso)
+            (
+                str(uuid.uuid4()), purchase_id, purchase["agent_id"], purchase["status"],
+                purchase["total_cents"], policy.version, now_iso
+            )
         )
 
     return PurchaseState.PAYPAL_ORDER_CREATED, approval_url
+
+
+def expire_purchase_if_due(
+    conn: sqlite3.Connection,
+    purchase_id: str,
+    now: Optional[float] = None
+) -> Tuple[PurchaseState, str]:
+    """
+    Applies state-machine time rules to a single purchase on read.
+    Expiry releases the reservation and never calls PayPal.
+    """
+    now, now_iso = _now_pair(now)
+    purchase = conn.execute("SELECT * FROM purchases WHERE id = ?;", (purchase_id,)).fetchone()
+    if not purchase:
+        return PurchaseState.FAILED, "purchase_not_found"
+
+    status = purchase["status"]
+    if status not in (
+        PurchaseState.PENDING_APPROVAL.value,
+        PurchaseState.PAYPAL_ORDER_CREATED.value,
+        PurchaseState.BUYER_APPROVED.value,
+    ):
+        return PurchaseState(status), "not_expirable"
+
+    expires_at = purchase["expires_at"]
+    if expires_at is None or now < expires_at:
+        return PurchaseState(status), "not_due"
+
+    reason = {
+        PurchaseState.PENDING_APPROVAL.value: "pending_approval_timeout",
+        PurchaseState.PAYPAL_ORDER_CREATED.value: "order_approval_timeout",
+        PurchaseState.BUYER_APPROVED.value: "buyer_approval_timeout",
+    }[status]
+
+    with transactional_session(conn):
+        updated = conn.execute(
+            """
+            UPDATE purchases
+            SET status = 'EXPIRED', status_reason = ?, state_entered_at = ?, updated_at = ?
+            WHERE id = ? AND status = ?;
+            """,
+            (reason, now, now_iso, purchase_id, status)
+        )
+        if updated.rowcount != 1:
+            current = conn.execute("SELECT status FROM purchases WHERE id = ?;", (purchase_id,)).fetchone()
+            return PurchaseState(current["status"]), "state_changed_before_expiry"
+
+        release_purchase_reservation(conn, purchase, actor="system", source_suffix="expiry_release")
+        conn.execute(
+            """
+            INSERT INTO ledger (
+                id, purchase_id, agent_id, from_state, to_state, rule_name,
+                reason, checkpoint, amount_cents, policy_version, actor, created_at
+            ) VALUES (?, ?, ?, ?, 'EXPIRED', 'TIME_EXPIRY', ?, 'TIME', ?, 1, 'system', ?);
+            """,
+            (str(uuid.uuid4()), purchase_id, purchase["agent_id"], status, reason, purchase["total_cents"], now_iso)
+        )
+
+    return PurchaseState.EXPIRED, reason
+
+
+def get_boot_id(conn: sqlite3.Connection) -> str:
+    """Returns the current process boot id, or a stable placeholder."""
+    row = conn.execute("SELECT value FROM meta WHERE key = 'boot_id';").fetchone()
+    return row["value"] if row else "boot_unknown"
+
+
+def advance_buyer_return(
+    conn: sqlite3.Connection,
+    purchase_id: str,
+    paypal_client: PayPalClientInterface,
+    boot_id: str
+) -> Tuple[str, str]:
+    """
+    Server-verified buyer return: GET the order, only accept APPROVED, then
+    transition to BUYER_APPROVED and capture. Idempotent across repeat visits.
+    """
+    now, now_iso = _now_pair()
+    purchase = conn.execute("SELECT * FROM purchases WHERE id = ?;", (purchase_id,)).fetchone()
+    if not purchase:
+        return "FAILED", "purchase_not_found"
+
+    status = purchase["status"]
+    if status == PurchaseState.CAPTURED.value:
+        return "CAPTURED", "already_captured"
+    if status in (
+        PurchaseState.BLOCKED.value,
+        PurchaseState.REJECTED.value,
+        PurchaseState.EXPIRED.value,
+        PurchaseState.FAILED.value,
+    ):
+        return status, "terminal_state"
+    if status not in (PurchaseState.PAYPAL_ORDER_CREATED.value, PurchaseState.BUYER_APPROVED.value):
+        return status, "not_awaiting_buyer_approval"
+
+    expired_state, expire_reason = expire_purchase_if_due(conn, purchase_id, now)
+    if expired_state == PurchaseState.EXPIRED:
+        return "EXPIRED", expire_reason
+
+    # A repeat return after a crash may already be BUYER_APPROVED: capture directly.
+    if status == PurchaseState.BUYER_APPROVED.value:
+        return execute_capture_flow(conn, purchase_id, paypal_client, boot_id)
+
+    order_outcome = paypal_client.get_order(purchase["paypal_order_id"])
+    if not order_outcome.success or not order_outcome.data:
+        return status, "get_order_failed_before_buyer_approval"
+
+    order_data = order_outcome.data
+    if order_data.get("status") != "APPROVED":
+        # Never trust the return query string: a non-approved order changes nothing.
+        return status, f"order_not_approved:{order_data.get('status')}"
+
+    try:
+        verify_order(order_data, purchase)
+    except VerificationError as err:
+        with transactional_session(conn):
+            updated = conn.execute(
+                """
+                UPDATE purchases
+                SET status = 'FAILED', status_reason = 'amount_mismatch',
+                    state_entered_at = ?, updated_at = ?
+                WHERE id = ? AND status = 'PAYPAL_ORDER_CREATED';
+                """,
+                (now, now_iso, purchase_id)
+            )
+            if updated.rowcount == 1:
+                release_purchase_reservation(conn, purchase, actor="system", source_suffix="mismatch_release")
+                conn.execute(
+                    """
+                    INSERT INTO ledger (
+                        id, purchase_id, agent_id, from_state, to_state, rule_name,
+                        reason, checkpoint, amount_cents, policy_version, actor, created_at
+                    ) VALUES (?, ?, ?, 'PAYPAL_ORDER_CREATED', 'FAILED', 'ORDER_VERIFICATION_FAILED', ?, 'P4', ?, 1, 'system', ?);
+                    """,
+                    (str(uuid.uuid4()), purchase_id, purchase["agent_id"], str(err), purchase["total_cents"], now_iso)
+                )
+        return "FAILED", f"amount_mismatch:{err}"
+
+    with transactional_session(conn):
+        updated = conn.execute(
+            """
+            UPDATE purchases
+            SET status = 'BUYER_APPROVED', state_entered_at = ?, expires_at = ?, updated_at = ?
+            WHERE id = ? AND status = 'PAYPAL_ORDER_CREATED';
+            """,
+            (now, now + EXPIRY_BUYER_APPROVED_SECONDS, now_iso, purchase_id)
+        )
+        if updated.rowcount != 1:
+            current = conn.execute("SELECT status FROM purchases WHERE id = ?;", (purchase_id,)).fetchone()
+            return current["status"], "state_changed_before_buyer_approval"
+
+        conn.execute(
+            """
+            INSERT INTO ledger (
+                id, purchase_id, agent_id, from_state, to_state, rule_name,
+                reason, checkpoint, amount_cents, policy_version, actor, created_at
+            ) VALUES (?, ?, ?, 'PAYPAL_ORDER_CREATED', 'BUYER_APPROVED', 'BUYER_RETURN_VERIFIED', 'PayPal reports buyer approved', 'RETURN', ?, 1, 'paypal', ?);
+            """,
+            (str(uuid.uuid4()), purchase_id, purchase["agent_id"], purchase["total_cents"], now_iso)
+        )
+
+    return execute_capture_flow(conn, purchase_id, paypal_client, boot_id)
 

@@ -13,6 +13,8 @@ from .state_machine import PurchaseState, validate_transition
 from ..db.connection import transactional_session
 from ..db.financial_journal import FactType, record_financial_fact
 from ..paypal.client import PayPalClientInterface, TransportOutcome
+from ..policy.rules import Checkpoint, Outcome
+from .rechecks import get_agent_policy, reevaluate_purchase, release_purchase_reservation
 
 
 EXPECTED_MERCHANT_ID = "MOCK_MERCHANT_123"
@@ -123,6 +125,32 @@ def execute_capture_flow(
             )
         return "FAILED", "amount_mismatch"
 
+    # 2b. Checkpoint P4: Pre-capture policy re-evaluation (e.g. freeze, daily budget)
+    policy = get_agent_policy(conn, purchase["agent_id"])
+    if policy is not None:
+        decision, _ = reevaluate_purchase(conn, purchase, Checkpoint.P4, now)
+        if decision and decision.outcome == Outcome.DENY:
+            with transactional_session(conn):
+                conn.execute(
+                    """
+                    UPDATE purchases
+                    SET status = 'BLOCKED', status_reason = ?, state_entered_at = ?, expires_at = NULL, updated_at = ?
+                    WHERE id = ? AND status = 'BUYER_APPROVED';
+                    """,
+                    (decision.reason, now, now_iso, purchase_id)
+                )
+                release_purchase_reservation(conn, purchase, actor="system", source_suffix="P4_deny_release")
+                conn.execute(
+                    """
+                    INSERT INTO ledger (
+                        id, purchase_id, agent_id, from_state, to_state, rule_name,
+                        reason, checkpoint, amount_cents, policy_version, actor, created_at
+                    ) VALUES (?, ?, ?, 'BUYER_APPROVED', 'BLOCKED', ?, ?, 'P4', ?, ?, 'system', ?);
+                    """,
+                    (str(uuid.uuid4()), purchase_id, purchase["agent_id"], decision.rule_name, decision.reason, purchase["total_cents"], policy.version, now_iso)
+                )
+            return "BLOCKED", decision.reason
+
     # 3. Atomic Capture Claim (BUYER_APPROVED -> CAPTURING)
     owner_token = str(uuid.uuid4())
     capture_req_id = str(uuid.uuid4())
@@ -160,9 +188,9 @@ def execute_capture_flow(
                 INSERT INTO ledger (
                     id, purchase_id, agent_id, from_state, to_state, rule_name,
                     reason, checkpoint, amount_cents, policy_version, actor, created_at
-                ) VALUES (?, ?, ?, 'BUYER_APPROVED', 'CAPTURING', 'CAPTURE_CLAIMED', 'Exclusive worker claim', 'P4', ?, 1, 'worker', ?);
+                ) VALUES (?, ?, ?, 'BUYER_APPROVED', 'CAPTURING', 'CAPTURE_CLAIMED', 'Exclusive worker claim', 'P4', ?, ?, 'worker', ?);
                 """,
-                (str(uuid.uuid4()), purchase_id, purchase["agent_id"], purchase["total_cents"], now_iso)
+                (str(uuid.uuid4()), purchase_id, purchase["agent_id"], purchase["total_cents"], policy.version if policy else 1, now_iso)
             )
 
     if not claimed:
