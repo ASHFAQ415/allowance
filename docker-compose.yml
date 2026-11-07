@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  allowance-app:
+    build: .
+    container_name: allowance_platform
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - ADMIN_TOKEN=prod-secret-admin-token-min-32-chars-long-secure-key-999
+      - DEMO_SESSION_TOKEN=demo-session-token-allowance-hackathon-2026
+      - DEMO_TENANT_ID=tenant_demo
+      - DB_PATH=/data/allowance.db
+      - PAYPAL_MODE=mock
+      - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID:-mock-client-id}
+      - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET:-mock-client-secret}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-mock-key}
+    volumes:
+      # Mandatory persistent volume for SQLite WAL
+      - allowance-data:/data
+
+volumes:
+  allowance-data:
+    driver: local
+
