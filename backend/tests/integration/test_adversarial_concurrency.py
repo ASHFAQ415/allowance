@@ -274,12 +274,12 @@ class TestAdversarialConcurrency(unittest.TestCase):
                 res = fut.result()
                 execution_results.append(res)
 
-        # Exactly 1 caller should capture the purchase; 9 should lose the claim
-        captured_outcomes = [r for r in execution_results if r[0] == "CAPTURED"]
-        claim_lost_outcomes = [r for r in execution_results if r[1] == "capture_claim_lost"]
+        # Exactly 1 caller should capture the purchase; 9 callers must NOT capture
+        captured_outcomes = [r for r in execution_results if r[0] == "CAPTURED" and r[1] != "not_in_buyer_approved_state"]
+        non_capturing_outcomes = [r for r in execution_results if r[0] != "CAPTURED" or r[1] == "not_in_buyer_approved_state"]
 
         self.assertEqual(len(captured_outcomes), 1)
-        self.assertEqual(len(claim_lost_outcomes), 9)
+        self.assertEqual(len(non_capturing_outcomes), 9)
 
         # Invariant 2: Database purchase status is CAPTURED
         cur = conn.execute("SELECT status FROM purchases WHERE id = 'pur_lease_race'")

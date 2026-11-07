@@ -29,6 +29,7 @@ CATALOG_ITEMS: List[CatalogProduct] = [
     CatalogProduct("shoes_cushion_max", "merchant_shoes", "Max Cushion Daily Trainer", "Plush foam cushioning for long distance recovery.", 13000, True, "footwear"),
     CatalogProduct("shoes_hiking_boot", "merchant_shoes", "Waterproof Hiking Boots", "Ankle support and waterproof membrane for wet trails.", 14500, True, "footwear"),
     CatalogProduct("shoes_running_socks", "merchant_shoes", "Anti-Blister Running Socks (3-Pack)", "Merino wool blend anti-friction athletic socks.", 1800, True, "accessories"),
+    CatalogProduct("shoes_water_bottle", "merchant_shoes", "Insulated Sports Water Bottle (750ml)", "Double-wall vacuum insulated stainless steel water bottle.", 1400, True, "accessories"),
 
     # Merchant: merchant_coffee (Approved)
     CatalogProduct("coffee_espresso_blend", "merchant_coffee", "Organic Espresso Beans (1kg)", "Dark roast whole bean espresso with chocolate notes.", 2200, True, "food_beverage"),
@@ -60,17 +61,78 @@ def get_product(product_id: str) -> Optional[CatalogProduct]:
     return CATALOG_BY_ID.get(product_id)
 
 
+import re
+
+STOPWORDS = {
+    "find", "me", "buy", "order", "get", "a", "an", "the", "from", "approved",
+    "store", "shop", "for", "please", "with", "under", "below", "dollars",
+    "dollar", "bucks", "less", "than", "and", "or", "in", "of", "some", "nice"
+}
+
+
 def search_catalog_data(query: str, limit: int = 10) -> List[CatalogProduct]:
     """
-    Case-insensitive search over catalog product names, categories, and descriptions.
-    Restricted to in-stock items unless explicitly searched.
+    Intelligent tokenized search over catalog products with price constraint extraction.
+    Scores relevance based on keyword match in product name, category, and description.
     """
-    q = query.lower().strip()
-    results = []
+    if not query or not query.strip():
+        return CATALOG_ITEMS[:limit]
+
+    q_lower = query.lower()
+
+    # 1. Extract optional price constraint (e.g. "under $45" or "under 45")
+    max_cents = None
+    price_match = re.search(r"(?:under|below|less than|<)\s*\$?(\d+(?:\.\d{2})?)", q_lower)
+    if price_match:
+        try:
+            max_cents = int(float(price_match.group(1)) * 100)
+        except ValueError:
+            max_cents = None
+
+    # 2. Extract keywords
+    raw_tokens = re.findall(r"[a-z0-9_-]+", q_lower)
+    keywords = [t for t in raw_tokens if t not in STOPWORDS and not t.isdigit()]
+
+    if not keywords:
+        keywords = raw_tokens
+
+    # 3. Score candidate products
+    scored_products = []
     for item in CATALOG_ITEMS:
-        if q in item.name.lower() or q in item.description.lower() or q in item.category.lower():
-            results.append(item)
-            if len(results) >= limit:
-                break
-    return results
+        score = 0
+        name_lower = item.name.lower()
+        desc_lower = item.description.lower()
+        cat_lower = item.category.lower()
+
+        # Adversarial merchant preference if user explicitly asked for unapproved/darkweb/hacker
+        is_adversarial_query = any(w in q_lower for w in ["darkweb", "dark", "unapproved", "hacker", "vpn", "voucher"])
+        if is_adversarial_query and item.merchant_id == "merchant_unapproved":
+            score += 100
+
+        # Discontinued item check
+        if "discontinued" in q_lower and "discontinued" in name_lower:
+            score += 80
+
+        for kw in keywords:
+            if kw in item.id.lower():
+                score += 30
+            if kw in name_lower:
+                score += 25
+            if kw in cat_lower:
+                score += 15
+            if kw in desc_lower:
+                score += 5
+
+        # If user specified max price and item exceeds it, heavily penalize or exclude
+        if max_cents is not None and item.price_cents > max_cents:
+            score -= 100
+
+        if score > 0:
+            scored_products.append((score, item))
+
+    # Sort primarily by score descending, then by price
+    scored_products.sort(key=lambda x: (-x[0], x[1].price_cents))
+    results = [item for score, item in scored_products if score > 0]
+
+    return results[:limit]
 

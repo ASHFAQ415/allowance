@@ -23,6 +23,7 @@ sys.path.insert(0, ROOT_DIR)
 from backend.app.db.connection import get_thread_connection, transactional_session
 from backend.app.db.financial_journal import get_budget_snapshot
 from backend.app.agent.loop import execute_agent_loop
+from backend.app.agent.catalog import get_product
 from backend.app.orchestrator.core import (
     get_agent_policy,
     submit_cart_to_orchestrator,
@@ -100,6 +101,19 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
             rows = cur.fetchall()
             purchases = []
             for r in rows:
+                items_list = []
+                try:
+                    raw_items = json.loads(r["cart_json"]) if r["cart_json"] else []
+                    for it in raw_items:
+                        p = get_product(it.get("id", ""))
+                        items_list.append({
+                            "name": p.name if p else it.get("id", "Product"),
+                            "quantity": it.get("qty", 1),
+                            "cents": it.get("cents", 0)
+                        })
+                except Exception:
+                    pass
+
                 purchases.append({
                     "id": r["id"],
                     "agent_id": r["agent_id"],
@@ -110,6 +124,7 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                     "currency": r["currency"],
                     "merchant_ids": json.loads(r["merchant_ids_json"]),
                     "budget_day": r["budget_day"],
+                    "items": items_list,
                     "created_at": r["created_at"],
                     "updated_at": r["updated_at"]
                 })
@@ -202,34 +217,54 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                     (run_id, agent_id, f"key_{run_id}", str(hash(prompt)), now, now_iso)
                 )
 
-            # Asynchronous agent task execution in worker thread
-            def worker():
-                c = get_thread_connection()
-                try:
-                    status, reason, cart, trace = execute_agent_loop(prompt)
-                    if status == "COMPLETED" and cart:
-                        # Submit cart to PayPilot orchestrator checkpoint P1
-                        pid, pstate, decision = submit_cart_to_orchestrator(c, "tenant_demo", agent_id, run_id, cart, time.time())
-                        
-                        # If auto-approved, automatically create PayPal order & capture
-                        if pstate == PurchaseState.AUTO_APPROVED:
-                            create_paypal_order_for_purchase(c, pid, mock_paypal)
-                            cur = c.execute("SELECT paypal_order_id FROM purchases WHERE id = ?;", (pid,))
-                            p_row = cur.fetchone()
-                            if p_row and p_row["paypal_order_id"]:
-                                mock_paypal.set_buyer_approved(p_row["paypal_order_id"])
-                                c.execute("UPDATE purchases SET status = 'BUYER_APPROVED' WHERE id = ?;", (pid,))
-                                execute_capture_flow(c, pid, mock_paypal, boot_id="dev_boot")
+            # Process run synchronously so UI gets immediate authoritative outcome
+            try:
+                status, reason, cart, trace = execute_agent_loop(prompt)
+                if status == "COMPLETED" and cart:
+                    pid, pstate, decision = submit_cart_to_orchestrator(conn, "tenant_demo", agent_id, run_id, cart, time.time())
+                    
+                    product_name = cart.items[0].name if cart.items else "Product"
+                    price_usd = f"{cart.total_cents / 100:.2f}"
 
-                    with c:
-                        c.execute("UPDATE agent_runs SET status = 'COMPLETED' WHERE id = ?;", (run_id,))
-                except Exception as ex:
-                    print(f"Error processing agent run {run_id}: {ex}")
-                    with c:
-                        c.execute("UPDATE agent_runs SET status = 'FAILED', status_reason = ? WHERE id = ?;", (str(ex), run_id))
+                    # If auto-approved, advance through PayPal create & capture
+                    if pstate == PurchaseState.AUTO_APPROVED:
+                        create_paypal_order_for_purchase(conn, pid, mock_paypal)
+                        cur = conn.execute("SELECT paypal_order_id FROM purchases WHERE id = ?;", (pid,))
+                        p_row = cur.fetchone()
+                        if p_row and p_row["paypal_order_id"]:
+                            mock_paypal.set_buyer_approved(p_row["paypal_order_id"])
+                            conn.execute("UPDATE purchases SET status = 'BUYER_APPROVED' WHERE id = ?;", (pid,))
+                            cap_status, cap_id = execute_capture_flow(conn, pid, mock_paypal, boot_id="dev_boot")
 
-            threading.Thread(target=worker, daemon=True).start()
-            return self._send_json(202, {"run_id": run_id, "status": "QUEUED"})
+                    with conn:
+                        conn.execute("UPDATE agent_runs SET status = 'COMPLETED' WHERE id = ?;", (run_id,))
+
+                    return self._send_json(200, {
+                        "run_id": run_id,
+                        "status": pstate.value,
+                        "purchase_id": pid,
+                        "product_name": product_name,
+                        "amount_usd": price_usd,
+                        "rule_name": decision.rule_name,
+                        "reason": decision.reason,
+                        "outcome": decision.outcome.value
+                    })
+                else:
+                    with conn:
+                        conn.execute("UPDATE agent_runs SET status = 'FAILED', status_reason = ? WHERE id = ?;", (reason, run_id))
+                    return self._send_json(400, {
+                        "run_id": run_id,
+                        "status": "FAILED",
+                        "detail": f"Agent could not build cart: {reason}"
+                    })
+            except Exception as ex:
+                with conn:
+                    conn.execute("UPDATE agent_runs SET status = 'FAILED', status_reason = ? WHERE id = ?;", (str(ex), run_id))
+                return self._send_json(400, {
+                    "run_id": run_id,
+                    "status": "FAILED",
+                    "detail": str(ex)
+                })
 
         return self._send_json(404, {"detail": "Endpoint not found"})
 

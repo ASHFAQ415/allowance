@@ -8,6 +8,7 @@ export interface Purchase {
   currency: string;
   merchant_ids: string[];
   budget_day: string;
+  items?: { name: string; quantity: number; cents: number }[];
   created_at: string;
   updated_at: string;
 }
