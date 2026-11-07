@@ -365,6 +365,22 @@ def execute_read_only_reconciliation(
 
     # Authoritative resolution:
     if order_status == "COMPLETED":
+        # Verify capture details match purchase total (Scenario V22-05)
+        try:
+            units = order.get("purchase_units", [])
+            if units:
+                unit = units[0]
+                payments = unit.get("payments", {})
+                captures = payments.get("captures", [])
+                if captures:
+                    cap = captures[0]
+                    cap_amount = float(cap.get("amount", {}).get("value", 0))
+                    expected_val = purchase["total_cents"] / 100.0
+                    if abs(cap_amount - expected_val) > 0.001:
+                        return "CAPTURE_UNKNOWN", "capture_amount_mismatch"
+        except Exception:
+            return "CAPTURE_UNKNOWN", "capture_detail_verification_error"
+
         # Capture completed on PayPal! Resolve to CAPTURED
         cap_id = f"CAP_RECON_{uuid.uuid4().hex[:8]}"
         with transactional_session(conn):
