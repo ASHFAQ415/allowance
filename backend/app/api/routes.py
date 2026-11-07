@@ -3,6 +3,7 @@ FastAPI Routes for Allowance Platform.
 Enforces Invariant 6, Tenant Scoping, DTO Allowlists, and Constant-time Token Validation.
 """
 
+import hashlib
 import json
 import sqlite3
 import time
@@ -68,6 +69,7 @@ from ..orchestrator.admission import check_and_admit_run, AdmissionRejectedError
 from ..orchestrator.core import approve_pending_purchase, get_agent_policy
 from ..orchestrator.capture_lifecycle import execute_read_only_reconciliation
 from ..paypal.client import MockPayPalClient
+from ..runtime import get_worker_pool
 
 
 api_router = APIRouter()
@@ -84,19 +86,23 @@ def health_check():
 def run_agent(
     payload: RunAgentRequest,
     request: Request,
+    response: Response,
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
     tenant_id: str = Depends(get_demo_tenant)
 ):
     """
     Submits new autonomous agent purchasing run.
     Enforces Invariant 4: capacity checks & atomic admission under BEGIN IMMEDIATE before row insertion.
+
+    The run is enqueued only after the admission transaction commits, so a worker
+    can never observe a run row that is not yet durable.
     """
     enforce_rate_limit(request, limit=10)
     
     conn = get_thread_connection()
     now = time.time()
     run_id = str(uuid.uuid4())
-    req_hash = str(hash(payload.user_prompt))
+    req_hash = hashlib.sha256(payload.user_prompt.encode("utf-8")).hexdigest()
 
     try:
         with transactional_session(conn):
@@ -107,13 +113,57 @@ def run_agent(
                 idempotency_key=idempotency_key,
                 request_hash=req_hash,
                 run_id=run_id,
-                now=now
+                now=now,
+                user_prompt=payload.user_prompt,
             )
     except AdmissionRejectedError as e:
+        if e.reason == "idempotency_hash_mismatch":
+            raise HTTPException(
+                status_code=422,
+                detail="Idempotency-Key was already used with a different request payload."
+            )
         raise HTTPException(
             status_code=503,
             detail=f"Admission rejected: {e.reason}",
             headers={"Retry-After": str(e.retry_after_seconds)}
+        )
+
+    if status == "ALREADY_EXISTS":
+        # Replay: return the durable run instead of a phantom id that 404s.
+        existing = conn.execute(
+            "SELECT id, status FROM agent_runs WHERE idempotency_key = ? AND tenant_id = ?;",
+            (idempotency_key, tenant_id)
+        ).fetchone()
+        if existing is None:
+            raise HTTPException(status_code=409, detail="Idempotent run is no longer available.")
+        response.status_code = 200
+        return {
+            "run_id": existing["id"],
+            "status": existing["status"],
+            "admitted": True,
+            "idempotent_replay": True,
+        }
+
+    # Post-commit dispatch: the row is durable before it can be claimed.
+    pool = get_worker_pool()
+    if pool is None or not pool.enqueue_run(run_id):
+        now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+        with transactional_session(conn):
+            conn.execute(
+                "UPDATE agent_runs SET status = 'FAILED', status_reason = 'queue_rejected' WHERE id = ? AND status = 'QUEUED';",
+                (run_id,)
+            )
+            conn.execute(
+                """
+                INSERT INTO events (tenant_id, event_type, run_id, payload_json, created_at)
+                VALUES (?, 'RUN_REJECTED', ?, ?, ?);
+                """,
+                (tenant_id, run_id, json.dumps({"reason": "queue_rejected"}), now_iso)
+            )
+        raise HTTPException(
+            status_code=503,
+            detail="Worker queue is temporarily full; retry with a new Idempotency-Key.",
+            headers={"Retry-After": "1"}
         )
 
     return {"run_id": run_id, "status": "QUEUED", "admitted": admitted}
