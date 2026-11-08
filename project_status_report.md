@@ -231,8 +231,11 @@ If you or your AI IDE (Cursor, Copilot, Antigravity) are extending this reposito
 ### Completed Milestones
 - [x] **P0 Runtime Wiring & Worker Pool:** Claimed agent runs processed asynchronously via `WorkerPoolManager` and FastAPI lifespan.
 - [x] **Safe Capture Protocol & Concurrency Fencing:** Atomic CAS capture claims, `MAY_HAVE_BEEN_SENT` marker, read-only reconciliation.
-- [x] **Full 53-Scenario Adversarial Matrix:** 114 automated tests covering tamper detection, freeze races, lease takeovers, and network failures.
-- [x] **PayPal Mode Selection:** Factory supporting `PAYPAL_MODE=mock|sandbox|live`.
+- [x] **Full Adversarial Test Matrix:** 126 automated unit and integration tests covering tamper detection, freeze races, lease takeovers, and network failures.
+- [x] **PayPal Mode Selection & Nested Capture Parsing:** Factory supporting `PAYPAL_MODE=mock|sandbox|live` with verified Orders v2 nested capture ID extraction.
+- [x] **Enterprise REST API v1 (`/v1/*`):** Standardized external purchase requests, trusted quote signing (`/v1/quotes`), daily allowance checks, and emergency freeze controls with SHA-256 hashed API key authentication.
+- [x] **Model Context Protocol (MCP) Server:** Native MCP JSON-RPC 2.0 server (`backend/app/mcp/server.py`) with 5 safe tools (`search_products`, `get_product_quote`, `get_allowance`, `request_purchase`, `get_purchase_status`), eliminating raw payment credentials from client AI agents.
+- [x] **Multi-Tenant Foundation & Credentials:** Segregated tenant databases with cryptographic API keys (`ak_live_...`), constant-time validation (`hmac.compare_digest`), and granular permissions (`propose`, `read`, `admin`).
 
 ### Remaining Milestones
 
