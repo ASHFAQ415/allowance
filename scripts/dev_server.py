@@ -293,6 +293,18 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
             except V1HTTPException as e:
                 return self._send_json(e.status_code, {"detail": e.detail})
 
+        if path == "/api/demo/reset":
+            from backend.app.db.connection import close_thread_connection
+            close_thread_connection()
+            for p in ("allowance.db", "allowance.db-wal", "allowance.db-shm"):
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
+            seed_database("allowance.db")
+            return self._send_json(200, {"status": "ok", "message": "Demo database freshly seeded."})
+
         if path == "/api/freeze":
             conn = get_thread_connection()
             now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

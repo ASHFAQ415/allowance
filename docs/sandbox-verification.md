@@ -2,7 +2,7 @@
 
 > Generated automatically by `scripts/paypal_smoke.py`  
 > Gate 1 Payment Correctness Verification Receipt  
-> Timestamp (UTC): 2026-11-08T06:19:17Z
+> Timestamp (UTC): 2026-11-08T07:18:32Z
 
 ---
 
@@ -11,8 +11,8 @@
 | Field | Authoritative Value | Verification Status |
 |---|---|---|
 | **Mode** | `DETERMINISTIC_MOCK` | ✅ Verified |
-| **Order ID** | `ORDER_70C5834BE46F` | ✅ Verified |
-| **Nested Capture ID** | `CAP_B6624F202D89` | ✅ Verified (`purchase_units[0].payments.captures[0].id`) |
+| **Order ID** | `ORDER_58CF36D300E6` | ✅ Verified |
+| **Nested Capture ID** | `CAP_DF17D3B989A0` | ✅ Verified (`purchase_units[0].payments.captures[0].id`) |
 | **Amount Captured** | `$45.00` | ✅ Exact Match (`45.00`) |
 | **Currency** | `USD` | ✅ Exact Match (`USD`) |
 | **Lifecycle State** | `COMPLETED` | ✅ Terminal Immutable |
@@ -33,7 +33,7 @@
 
 ```json
 {
-  "id": "ORDER_70C5834BE46F",
+  "id": "ORDER_58CF36D300E6",
   "status": "COMPLETED",
   "purchase_units": [
     {
@@ -49,15 +49,15 @@
       "payments": {
         "captures": [
           {
-            "id": "CAP_B6624F202D89",
+            "id": "CAP_DF17D3B989A0",
             "status": "COMPLETED",
             "amount": {
               "currency_code": "USD",
               "value": "45.00"
             },
             "final_capture": true,
-            "create_time": "2026-11-08T06:19:17Z",
-            "update_time": "2026-11-08T06:19:17Z"
+            "create_time": "2026-11-08T07:18:32Z",
+            "update_time": "2026-11-08T07:18:32Z"
           }
         ]
       }
@@ -65,11 +65,11 @@
   ],
   "links": [
     {
-      "href": "https://www.sandbox.paypal.com/checkoutnow?token=ORDER_70C5834BE46F",
+      "href": "https://www.sandbox.paypal.com/checkoutnow?token=ORDER_58CF36D300E6",
       "rel": "payer-action",
       "method": "GET"
     }
   ],
-  "capture_id": "CAP_B6624F202D89"
+  "capture_id": "CAP_DF17D3B989A0"
 }
 ```
