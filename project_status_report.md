@@ -132,6 +132,18 @@ allowance/
   - ⚠️ **DarkWeb Store ($15)** — Demonstrates deterministic merchant block via Rule R4.
   - ☕ **2x Coffee Beans ($44)** — Verifies multi-quantity cart arithmetic and budget compliance.
 
+### Update 5: Gate 1 Payment Correctness & Nested Capture ID
+- **Nested Capture ID Extraction (`backend/app/orchestrator/capture_lifecycle.py`):**
+  - Corrected capture ID parsing: PayPal Orders v2 provides the actual capture ID within nested `purchase_units[0].payments.captures[0].id` rather than the top-level order ID.
+  - Added pre-settlement capture amount and currency code verification against purchase total.
+- **Search Fallback Hardening (`backend/app/agent/loop.py`):**
+  - Eliminated silent fallback to cheapest catalog item. Any search query that fails relevance criteria refuses cleanly with `no_matching_item`.
+  - Added regression test `test_eval_16_unmatched_query_refuses_without_cheap_fallback`.
+- **Two-Step Approval UX (`frontend/src/App.tsx`):**
+  - Made the two approvals explicitly distinct: Step 1: PayPilot Supervisor Approval (P2), followed by Step 2: PayPal Buyer Consent.
+- **Genuine Smoke Check & Evidence Recording (`scripts/paypal_smoke.py`):**
+  - Performs full order create, buyer consent, capture, amount/currency check, and saves sanitized audit evidence to `docs/sandbox-verification.md`.
+
 ---
 
 ## 4. Current System & Verification Status
@@ -140,12 +152,13 @@ allowance/
 |---|---|---|
 | **Deterministic Policy Engine (R0–R6)** | ✅ Complete | Verified with 100% test coverage for kill switch, limits, whitelist, and budget checks |
 | **Checkpoints P1, P2, P3, P4** | ✅ Complete | Enforces state gating prior to provider calls and post-approval with self-exclusion |
-| **PayPal Orders v2 Client (Mock/Sandbox/Live)** | ✅ Complete | Factory selection via `PAYPAL_MODE`; exclusive lease claiming; idempotent recovery |
+| **PayPal Orders v2 Client (Mock/Sandbox/Live)** | ✅ Complete | Factory selection via `PAYPAL_MODE`; nested capture ID extraction; idempotent recovery |
 | **Append-Only Financial Journal** | ✅ Complete | Zero floating-point math; integer cents; double-entry journal balance tracking |
 | **Admission Queue & Concurrency Fencing** | ✅ Complete | Atomic transaction claim; queue expiry enforcement; CAS leasing |
 | **AST Agent Sandbox Boundary** | ✅ Complete | Verified compile-time isolation preventing DB, payment API, or credential access |
-| **Frontend Dashboard (React 18)** | ✅ Complete | Single-page real-time dashboard; compiled with Vite (0 build errors) |
-| **Automated Test Suite** | ✅ Complete | **114 / 114 tests passing** across 14 test suites in ~6.8 seconds |
+| **Frontend Dashboard (React 18)** | ✅ Complete | Single-page real-time dashboard with 2-step approval UX; compiled with Vite |
+| **Automated Test Suite** | ✅ Complete | **115 / 115 tests passing** across 14 test suites in ~6.6 seconds |
+| **Gate 1 Evidence Receipt** | ✅ Generated | Documented in `docs/sandbox-verification.md` |
 | **Local Standalone Dev Server** | ✅ Active | Running on `http://localhost:8000` via `scripts/dev_server.py` |
 
 ---
