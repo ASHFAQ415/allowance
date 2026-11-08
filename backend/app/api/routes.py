@@ -43,10 +43,11 @@ except ImportError:
     class StreamingResponse(Response):
         pass
     class HTTPException(Exception):
-        def __init__(self, status_code: int, detail: str = ""):
+        def __init__(self, status_code: int, detail: str = "", headers: dict = None, **kwargs):
             super().__init__(f"{status_code}: {detail}")
             self.status_code = status_code
             self.detail = detail
+            self.headers = headers or {}
 
 from ..db.connection import get_thread_connection, transactional_session
 from .dto import (
