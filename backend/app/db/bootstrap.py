@@ -23,6 +23,40 @@ def seed_defaults(conn) -> None:
     """Seeds the default tenant, agent, and financial policy if absent."""
     now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
+    # 1. Multi-Tenant Organizations & Users
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO tenants (id, name, tier, created_at)
+        VALUES (?, 'Demo Organization', 'business', ?);
+        """,
+        (DEFAULT_TENANT_ID, now_iso)
+    )
+
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO tenants (id, name, tier, created_at)
+        VALUES ('tenant_personal', 'Personal Account (Ashfaq)', 'personal', ?);
+        """,
+        (now_iso,)
+    )
+
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO users (id, email, role, created_at)
+        VALUES ('user_demo', 'admin@demo.allowance.dev', 'owner', ?);
+        """,
+        (now_iso,)
+    )
+
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO tenant_memberships (id, tenant_id, user_id, role, created_at)
+        VALUES ('mem_demo', ?, 'user_demo', 'owner', ?);
+        """,
+        (DEFAULT_TENANT_ID, now_iso)
+    )
+
+    # 2. Default Agent & Policy
     conn.execute(
         """
         INSERT OR REPLACE INTO agents (id, tenant_id, name, created_at)

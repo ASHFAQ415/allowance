@@ -13,7 +13,34 @@ CREATE TABLE IF NOT EXISTS meta (
     updated_at TEXT NOT NULL
 );
 
--- 2. Tenant & Agents
+-- 2. Organizations, Users & Multi-Tenant Identity
+CREATE TABLE IF NOT EXISTS tenants (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    tier TEXT NOT NULL DEFAULT 'personal', -- personal, business, enterprise
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT,
+    role TEXT NOT NULL DEFAULT 'owner', -- owner, admin, approver, auditor
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tenant_memberships (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    UNIQUE(tenant_id, user_id)
+);
+
+-- 3. Tenant Agents & Scoped Credentials
 CREATE TABLE IF NOT EXISTS agents (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -21,7 +48,37 @@ CREATE TABLE IF NOT EXISTS agents (
     created_at TEXT NOT NULL
 );
 
--- 3. Policy & Immutable History
+CREATE TABLE IF NOT EXISTS agent_credentials (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    key_hash TEXT UNIQUE NOT NULL, -- SHA-256 of API key (e.g. ak_live_...)
+    key_prefix TEXT NOT NULL,
+    scopes_json TEXT NOT NULL DEFAULT '["propose", "read"]',
+    expires_at REAL,
+    revoked_at REAL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(agent_id) REFERENCES agents(id)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_credentials_lookup ON agent_credentials(key_hash, revoked_at);
+
+-- 4. Server-Side Trusted Quotes (10-Minute Expiry)
+CREATE TABLE IF NOT EXISTS quotes (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    cart_json TEXT NOT NULL,
+    cart_hash TEXT NOT NULL,
+    total_cents INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    expires_at REAL NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(agent_id) REFERENCES agents(id)
+);
+CREATE INDEX IF NOT EXISTS idx_quotes_expiry ON quotes(expires_at);
+
+-- 5. Policy & Immutable History
 CREATE TABLE IF NOT EXISTS policy (
     agent_id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,

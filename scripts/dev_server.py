@@ -34,6 +34,20 @@ from backend.app.orchestrator.capture_lifecycle import execute_capture_flow
 from backend.app.paypal.client import MockPayPalClient
 from backend.app.policy.rules import Outcome
 from backend.app.orchestrator.state_machine import PurchaseState
+from backend.app.api.v1.routes import (
+    get_allowance as v1_get_allowance,
+    request_quote as v1_request_quote,
+    submit_purchase_request as v1_submit_purchase_request,
+    list_purchase_requests as v1_list_purchase_requests,
+    get_purchase_request as v1_get_purchase_request,
+    approve_request as v1_approve_request,
+    reject_request as v1_reject_request,
+    freeze_agent as v1_freeze_agent,
+    unfreeze_agent as v1_unfreeze_agent,
+    get_current_credential,
+    HTTPException as V1HTTPException,
+    Response as V1Response,
+)
 from scripts.seed_db import seed_database
 
 FRONTEND_DIST = os.path.join(ROOT_DIR, "frontend", "dist")
@@ -59,6 +73,18 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(resp)
 
+    def _get_v1_cred(self):
+        auth = self.headers.get("Authorization")
+        api_key = self.headers.get("X-API-Key")
+        try:
+            return get_current_credential(authorization=auth, x_api_key=api_key)
+        except V1HTTPException as e:
+            self._send_json(e.status_code, {"detail": e.detail})
+            return None
+        except Exception as e:
+            self._send_json(401, {"detail": str(e)})
+            return None
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -77,6 +103,38 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                 "env": "development",
                 "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             })
+
+        # --- Version 1 Scoped REST API Endpoints ---
+        if path == "/v1/allowance":
+            cred = self._get_v1_cred()
+            if not cred:
+                return
+            try:
+                res = v1_get_allowance(cred)
+                return self._send_json(200, res)
+            except V1HTTPException as e:
+                return self._send_json(e.status_code, {"detail": e.detail})
+
+        if path == "/v1/purchase-requests":
+            cred = self._get_v1_cred()
+            if not cred:
+                return
+            try:
+                res = v1_list_purchase_requests(cred)
+                return self._send_json(200, res)
+            except V1HTTPException as e:
+                return self._send_json(e.status_code, {"detail": e.detail})
+
+        if path.startswith("/v1/purchase-requests/"):
+            purchase_id = path.split("/")[3]
+            cred = self._get_v1_cred()
+            if not cred:
+                return
+            try:
+                res = v1_get_purchase_request(purchase_id, cred)
+                return self._send_json(200, res)
+            except V1HTTPException as e:
+                return self._send_json(e.status_code, {"detail": e.detail})
 
         if path == "/api/policy":
             conn = get_thread_connection()
@@ -167,6 +225,73 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
             payload = json.loads(body.decode("utf-8")) if body else {}
         except Exception:
             payload = {}
+
+        # --- Version 1 Scoped REST API Endpoints ---
+        if path == "/v1/quotes":
+            cred = self._get_v1_cred()
+            if not cred:
+                return
+            try:
+                res = v1_request_quote(payload, cred)
+                return self._send_json(201, res)
+            except V1HTTPException as e:
+                return self._send_json(e.status_code, {"detail": e.detail})
+
+        if path == "/v1/purchase-requests":
+            cred = self._get_v1_cred()
+            if not cred:
+                return
+            idempotency_key = self.headers.get("Idempotency-Key")
+            if not idempotency_key:
+                return self._send_json(422, {"detail": "Missing mandatory Idempotency-Key header."})
+            try:
+                v1_resp = V1Response()
+                res = v1_submit_purchase_request(payload, v1_resp, idempotency_key, cred)
+                return self._send_json(v1_resp.status_code, res)
+            except V1HTTPException as e:
+                return self._send_json(e.status_code, {"detail": e.detail})
+
+        if path.startswith("/v1/purchase-requests/") and path.endswith("/approve"):
+            purchase_id = path.split("/")[3]
+            cred = self._get_v1_cred()
+            if not cred:
+                return
+            try:
+                res = v1_approve_request(purchase_id, cred)
+                return self._send_json(200, res)
+            except V1HTTPException as e:
+                return self._send_json(e.status_code, {"detail": e.detail})
+
+        if path.startswith("/v1/purchase-requests/") and path.endswith("/reject"):
+            purchase_id = path.split("/")[3]
+            cred = self._get_v1_cred()
+            if not cred:
+                return
+            try:
+                res = v1_reject_request(purchase_id, payload, cred)
+                return self._send_json(200, res)
+            except V1HTTPException as e:
+                return self._send_json(e.status_code, {"detail": e.detail})
+
+        if path == "/v1/freeze":
+            cred = self._get_v1_cred()
+            if not cred:
+                return
+            try:
+                res = v1_freeze_agent(payload, cred)
+                return self._send_json(200, res)
+            except V1HTTPException as e:
+                return self._send_json(e.status_code, {"detail": e.detail})
+
+        if path == "/v1/unfreeze":
+            cred = self._get_v1_cred()
+            if not cred:
+                return
+            try:
+                res = v1_unfreeze_agent(payload, cred)
+                return self._send_json(200, res)
+            except V1HTTPException as e:
+                return self._send_json(e.status_code, {"detail": e.detail})
 
         if path == "/api/freeze":
             conn = get_thread_connection()

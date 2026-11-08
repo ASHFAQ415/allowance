@@ -16,6 +16,7 @@ except ImportError:
         pass
 
 from .routes import api_router
+from .v1 import v1_router
 from .auth import verify_startup_security_config
 
 
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
     )
     
     app.include_router(api_router)
+    app.include_router(v1_router)
     return app
 
 app = create_app()

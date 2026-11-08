@@ -144,6 +144,19 @@ allowance/
 - **Genuine Smoke Check & Evidence Recording (`scripts/paypal_smoke.py`):**
   - Performs full order create, buyer consent, capture, amount/currency check, and saves sanitized audit evidence to `docs/sandbox-verification.md`.
 
+### Update 6: Client Integration Architecture (REST API v1, MCP Server & Multi-Tenant Foundations)
+- **Option A: Scoped Versioned REST API v1 (`backend/app/api/v1/`):**
+  - Implemented `/v1/quotes` (trusted server-side catalog quotes with 10-minute expiry and cart hash).
+  - Implemented `/v1/purchase-requests` with header-only `Idempotency-Key` and strict client identity resolution from authenticated API keys (never trusted from request body).
+  - Implemented `/v1/allowance`, `/v1/purchase-requests/{id}/approve`, and `/v1/freeze` / `/v1/unfreeze`.
+- **Option B: Model Context Protocol (MCP) Server (`backend/app/mcp/server.py`):**
+  - Standalone MCP JSON-RPC 2.0 server enabling external AI models (Claude Desktop, Cursor, Gemini Live) to interact safely through 5 bounded tools: `search_products`, `get_product_quote`, `get_allowance`, `request_purchase`, `get_purchase_status`.
+  - Invariant 6 enforced: `capture_payment`, `approve_purchase`, and `modify_policy` are strictly omitted from the MCP tool catalog.
+- **Multi-Tenant Foundation & Scoped API Credentials (`backend/app/auth/credentials.py`):**
+  - Added multi-tenant entities (`tenants`, `users`, `tenant_memberships`, `agent_credentials`, `quotes`).
+  - Implemented SHA-256 hashed API key management (`ak_live_...`) with constant-time verification, role scopes (`propose`, `read`, `admin`), and instant revocation.
+  - Added comprehensive cross-tenant isolation and MCP tool contract test suites (**126 / 126 tests passing**).
+
 ---
 
 ## 4. Current System & Verification Status
@@ -155,9 +168,11 @@ allowance/
 | **PayPal Orders v2 Client (Mock/Sandbox/Live)** | ✅ Complete | Factory selection via `PAYPAL_MODE`; nested capture ID extraction; idempotent recovery |
 | **Append-Only Financial Journal** | ✅ Complete | Zero floating-point math; integer cents; double-entry journal balance tracking |
 | **Admission Queue & Concurrency Fencing** | ✅ Complete | Atomic transaction claim; queue expiry enforcement; CAS leasing |
+| **Scoped REST API v1 & Auth** | ✅ Complete | `/v1/quotes`, `/v1/purchase-requests`, `/v1/allowance` with API key auth |
+| **Model Context Protocol (MCP) Server** | ✅ Complete | 5 bounded tools for external AI models; JSON-RPC 2.0 stdio & programmatic dispatch |
 | **AST Agent Sandbox Boundary** | ✅ Complete | Verified compile-time isolation preventing DB, payment API, or credential access |
 | **Frontend Dashboard (React 18)** | ✅ Complete | Single-page real-time dashboard with 2-step approval UX; compiled with Vite |
-| **Automated Test Suite** | ✅ Complete | **115 / 115 tests passing** across 14 test suites in ~6.6 seconds |
+| **Automated Test Suite** | ✅ Complete | **126 / 126 tests passing** across 16 test suites in ~6.8 seconds |
 | **Gate 1 Evidence Receipt** | ✅ Generated | Documented in `docs/sandbox-verification.md` |
 | **Local Standalone Dev Server** | ✅ Active | Running on `http://localhost:8000` via `scripts/dev_server.py` |
 
