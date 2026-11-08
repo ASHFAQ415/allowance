@@ -112,7 +112,9 @@ class AdminPurchaseDetailDTO(PublicPurchaseDTO):
 
 class AdminApprovalLinkDTO(BaseModel):
     purchase_id: str
+    paypal_order_id: Optional[str] = None
     approval_url: str
+    expires_at: Optional[str] = None
 
 
 class AdminRunDetailDTO(PublicAgentRunDTO):

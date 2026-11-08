@@ -10,8 +10,11 @@ import uuid
 from typing import Optional, Tuple
 
 from .state_machine import PurchaseState, validate_transition
+from ..db.connection import transactional_session
 from ..db.financial_journal import FactType, record_financial_fact
 from ..paypal.client import PayPalClientInterface, TransportOutcome
+from ..policy.rules import Checkpoint, Outcome
+from .rechecks import get_agent_policy, reevaluate_purchase, release_purchase_reservation
 
 
 EXPECTED_MERCHANT_ID = "MOCK_MERCHANT_123"
@@ -73,6 +76,17 @@ def execute_capture_flow(
         return "FAILED", "purchase_not_found"
 
     if purchase["status"] != PurchaseState.BUYER_APPROVED.value:
+        # A concurrent capture worker may already own the claim. Treat any
+        # post-claim state as a lost claim rather than a precondition failure
+        # so callers observe a consistent "single winner" result. The loser
+        # reports CAPTURING (never CAPTURED) so exactly one caller owns the
+        # successful outcome.
+        if purchase["status"] in (
+            PurchaseState.CAPTURING.value,
+            PurchaseState.CAPTURED.value,
+            PurchaseState.CAPTURE_UNKNOWN.value,
+        ):
+            return "CAPTURING", "capture_claim_lost"
         return purchase["status"], "not_in_buyer_approved_state"
 
     order_id = purchase["paypal_order_id"]
@@ -86,7 +100,7 @@ def execute_capture_flow(
         verify_order(get_outcome.data, purchase)
     except VerificationError as v_err:
         # Tampering detected! Transition to FAILED(amount_mismatch) and release reservation
-        with conn:
+        with transactional_session(conn):
             conn.execute(
                 """
                 UPDATE purchases
@@ -111,11 +125,40 @@ def execute_capture_flow(
             )
         return "FAILED", "amount_mismatch"
 
+    # 2b. Checkpoint P4: Pre-capture policy re-evaluation (e.g. freeze, daily budget)
+    policy = get_agent_policy(conn, purchase["agent_id"])
+    if policy is not None:
+        decision, _ = reevaluate_purchase(conn, purchase, Checkpoint.P4, now)
+        if decision and decision.outcome == Outcome.DENY:
+            with transactional_session(conn):
+                conn.execute(
+                    """
+                    UPDATE purchases
+                    SET status = 'BLOCKED', status_reason = ?, state_entered_at = ?, expires_at = NULL, updated_at = ?
+                    WHERE id = ? AND status = 'BUYER_APPROVED';
+                    """,
+                    (decision.reason, now, now_iso, purchase_id)
+                )
+                release_purchase_reservation(conn, purchase, actor="system", source_suffix="P4_deny_release")
+                conn.execute(
+                    """
+                    INSERT INTO ledger (
+                        id, purchase_id, agent_id, from_state, to_state, rule_name,
+                        reason, checkpoint, amount_cents, policy_version, actor, created_at
+                    ) VALUES (?, ?, ?, 'BUYER_APPROVED', 'BLOCKED', ?, ?, 'P4', ?, ?, 'system', ?);
+                    """,
+                    (str(uuid.uuid4()), purchase_id, purchase["agent_id"], decision.rule_name, decision.reason, purchase["total_cents"], policy.version, now_iso)
+                )
+            return "BLOCKED", decision.reason
+
     # 3. Atomic Capture Claim (BUYER_APPROVED -> CAPTURING)
     owner_token = str(uuid.uuid4())
     capture_req_id = str(uuid.uuid4())
+    claimed = False
 
-    with conn:
+    # The claim, the durable capture operation, and the ledger transition are
+    # one serialized unit. Only the winner of the CAS may write them.
+    with transactional_session(conn):
         cur_claim = conn.execute(
             """
             UPDATE purchases
@@ -124,34 +167,38 @@ def execute_capture_flow(
             """,
             (boot_id, now_iso, purchase_id)
         )
-        if cur_claim.rowcount != 1:
-            return purchase["status"], "capture_claim_lost"
+        claimed = cur_claim.rowcount == 1
 
-        # Record durable capture_operation in PREPARED state
-        op_id = str(uuid.uuid4())
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO capture_operations (
-                id, purchase_id, capture_request_id, state, owner_token,
-                owner_lease_until, attempt_count, created_at, updated_at
-            ) VALUES (?, ?, ?, 'PREPARED', ?, ?, 1, ?, ?);
-            """,
-            (op_id, purchase_id, capture_req_id, owner_token, now + 30.0, now_iso, now_iso)
-        )
+        if claimed:
+            # Record durable capture_operation in PREPARED state
+            op_id = str(uuid.uuid4())
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO capture_operations (
+                    id, purchase_id, capture_request_id, state, owner_token,
+                    owner_lease_until, attempt_count, created_at, updated_at
+                ) VALUES (?, ?, ?, 'PREPARED', ?, ?, 1, ?, ?);
+                """,
+                (op_id, purchase_id, capture_req_id, owner_token, now + 30.0, now_iso, now_iso)
+            )
 
-        # Log ledger transition
-        conn.execute(
-            """
-            INSERT INTO ledger (
-                id, purchase_id, agent_id, from_state, to_state, rule_name,
-                reason, checkpoint, amount_cents, policy_version, actor, created_at
-            ) VALUES (?, ?, ?, 'BUYER_APPROVED', 'CAPTURING', 'CAPTURE_CLAIMED', 'Exclusive worker claim', 'P4', ?, 1, 'worker', ?);
-            """,
-            (str(uuid.uuid4()), purchase_id, purchase["agent_id"], purchase["total_cents"], now_iso)
-        )
+            # Log ledger transition
+            conn.execute(
+                """
+                INSERT INTO ledger (
+                    id, purchase_id, agent_id, from_state, to_state, rule_name,
+                    reason, checkpoint, amount_cents, policy_version, actor, created_at
+                ) VALUES (?, ?, ?, 'BUYER_APPROVED', 'CAPTURING', 'CAPTURE_CLAIMED', 'Exclusive worker claim', 'P4', ?, ?, 'worker', ?);
+                """,
+                (str(uuid.uuid4()), purchase_id, purchase["agent_id"], purchase["total_cents"], policy.version if policy else 1, now_iso)
+            )
+
+    if not claimed:
+        # Another worker won the race between our read and the CAS.
+        return "CAPTURING", "capture_claim_lost"
 
     # 4. Persist MAY_HAVE_BEEN_SENT marker before transmission begins
-    with conn:
+    with transactional_session(conn):
         conn.execute(
             """
             UPDATE capture_operations
@@ -167,12 +214,12 @@ def execute_capture_flow(
     # Invariant 1: If pre-send connect error occurred (proven no bytes sent), retry exactly ONCE
     if not cap_outcome.bytes_may_have_been_sent and cap_outcome.error_class == "ConnectError":
         time.sleep(1.0)
-        with conn:
+        with transactional_session(conn):
             conn.execute("UPDATE capture_operations SET attempt_count = 2 WHERE purchase_id = ?;", (purchase_id,))
         cap_outcome = paypal_client.capture_order(order_id, capture_req_id)
 
     # 6. Parse and Record Outcome
-    with conn:
+    with transactional_session(conn):
         # Verify ownership lease
         cur_op = conn.execute("SELECT state FROM capture_operations WHERE purchase_id = ? AND owner_token = ?;", (purchase_id, owner_token))
         if not cur_op.fetchone():
@@ -318,9 +365,25 @@ def execute_read_only_reconciliation(
 
     # Authoritative resolution:
     if order_status == "COMPLETED":
+        # Verify capture details match purchase total (Scenario V22-05)
+        try:
+            units = order.get("purchase_units", [])
+            if units:
+                unit = units[0]
+                payments = unit.get("payments", {})
+                captures = payments.get("captures", [])
+                if captures:
+                    cap = captures[0]
+                    cap_amount = float(cap.get("amount", {}).get("value", 0))
+                    expected_val = purchase["total_cents"] / 100.0
+                    if abs(cap_amount - expected_val) > 0.001:
+                        return "CAPTURE_UNKNOWN", "capture_amount_mismatch"
+        except Exception:
+            return "CAPTURE_UNKNOWN", "capture_detail_verification_error"
+
         # Capture completed on PayPal! Resolve to CAPTURED
         cap_id = f"CAP_RECON_{uuid.uuid4().hex[:8]}"
-        with conn:
+        with transactional_session(conn):
             conn.execute("UPDATE purchases SET status = 'CAPTURED', updated_at = ? WHERE id = ?;", (now_iso, purchase_id))
             conn.execute("UPDATE capture_operations SET state = 'RESOLVED_SUCCESS', paypal_capture_id = ?, updated_at = ? WHERE purchase_id = ?;", (cap_id, now_iso, purchase_id))
             conn.execute(
@@ -378,7 +441,7 @@ def record_late_capture_adjustment(
         return False
 
     adj_id = str(uuid.uuid4())
-    with conn:
+    with transactional_session(conn):
         conn.execute(
             """
             INSERT OR IGNORE INTO ledger_adjustments (

@@ -80,6 +80,17 @@ def init_db(db_path: str = DEFAULT_DB_PATH, schema_path: Optional[str] = None) -
     conn = create_connection(db_path)
     try:
         conn.executescript(schema_sql)
+        _apply_light_migrations(conn)
     finally:
         conn.close()
+
+
+def _apply_light_migrations(conn: sqlite3.Connection) -> None:
+    """
+    Forward-only column additions for databases created before a column existed.
+    Full versioned migrations are tracked separately in the implementation plan.
+    """
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(agent_runs);")}
+    if "user_prompt" not in existing:
+        conn.execute("ALTER TABLE agent_runs ADD COLUMN user_prompt TEXT;")
 

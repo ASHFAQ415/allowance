@@ -8,6 +8,7 @@ Enforces Invariant 1:
 """
 
 import json
+import os
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
@@ -71,6 +72,12 @@ class MockPayPalClient(PayPalClientInterface):
         self.simulate_capture_pending: bool = False
         self.simulate_capture_declined: bool = False
         self.simulate_amount_tamper: bool = False
+        # Phase A extended fault injectors
+        self.simulate_payee_tamper: bool = False          # #14: wrong merchant_id in GET order
+        self.simulate_currency_tamper: bool = False       # #15: wrong currency in GET order
+        self.simulate_unknown_status: bool = False        # #12: unrecognized status string from GET
+        self.simulate_capture_detail_mismatch: bool = False  # V22-05: COMPLETED but amount wrong
+        self.simulate_write_error: bool = False           # V22-03: ambiguous mid-POST TCP error
 
     def create_order(
         self,
@@ -134,9 +141,37 @@ class MockPayPalClient(PayPalClientInterface):
 
         order_data = self.orders[order_id]
         if self.simulate_amount_tamper:
-            # Adversarial simulation: tampered amount returned by provider
+            # #13: Adversarial simulation: tampered amount returned by provider
             tampered = json.loads(json.dumps(order_data))
             tampered["purchase_units"][0]["amount"]["value"] = "999.99"
+            return TransportOutcome(success=True, status_code=200, data=tampered, bytes_may_have_been_sent=True)
+
+        if self.simulate_payee_tamper:
+            # #14: Wrong merchant_id from provider
+            tampered = json.loads(json.dumps(order_data))
+            tampered["purchase_units"][0]["payee"]["merchant_id"] = "EVIL_MERCHANT_XYZ"
+            return TransportOutcome(success=True, status_code=200, data=tampered, bytes_may_have_been_sent=True)
+
+        if self.simulate_currency_tamper:
+            # #15: Wrong currency code from provider
+            tampered = json.loads(json.dumps(order_data))
+            tampered["purchase_units"][0]["amount"]["currency_code"] = "EUR"
+            return TransportOutcome(success=True, status_code=200, data=tampered, bytes_may_have_been_sent=True)
+
+        if self.simulate_unknown_status:
+            # #12: Completely unrecognized status string
+            tampered = json.loads(json.dumps(order_data))
+            tampered["status"] = "MYSTERY_STATUS_XYZ"
+            return TransportOutcome(success=True, status_code=200, data=tampered, bytes_may_have_been_sent=True)
+
+        if self.simulate_capture_detail_mismatch:
+            # V22-05: Order shows COMPLETED but capture amount doesn't match
+            tampered = json.loads(json.dumps(order_data))
+            tampered["status"] = "COMPLETED"
+            tampered["purchase_units"][0]["payments"] = {
+                "captures": [{"id": "CAP_MISMATCH", "status": "COMPLETED",
+                               "amount": {"currency_code": "USD", "value": "9999.99"}}]
+            }
             return TransportOutcome(success=True, status_code=200, data=tampered, bytes_may_have_been_sent=True)
 
         return TransportOutcome(
@@ -166,6 +201,17 @@ class MockPayPalClient(PayPalClientInterface):
                 bytes_may_have_been_sent=False,  # Proven no bytes left socket!
                 error_class="ConnectError",
                 raw_error="Failed to connect to api-m.sandbox.paypal.com:443"
+            )
+
+        # V22-03: Simulate ambiguous mid-POST TCP write error (bytes_may_have_been_sent=True)
+        if self.simulate_write_error:
+            return TransportOutcome(
+                success=False,
+                status_code=0,
+                data=None,
+                bytes_may_have_been_sent=True,  # INVARIANT 1: Ambiguous — must fail closed
+                error_class="WriteError",
+                raw_error="BrokenPipeError: connection reset mid-POST"
             )
 
         # 2. Simulate Post-send Read Timeout
@@ -508,4 +554,43 @@ class PayPalHttpClient(PayPalClientInterface):
                 error_class="TIMEOUT_OR_AMBIGUOUS_TRANSPORT",
                 raw_error=str(e)
             )
+
+
+_paypal_client_instance: Optional[PayPalClientInterface] = None
+
+
+def get_paypal_mode() -> str:
+    """Returns configured PAYPAL_MODE: 'mock' (default), 'sandbox', or 'live'."""
+    return os.environ.get("PAYPAL_MODE", "mock").strip().lower()
+
+
+def get_paypal_client() -> PayPalClientInterface:
+    """Returns PayPal client matching PAYPAL_MODE or injected instance."""
+    global _paypal_client_instance
+    if _paypal_client_instance is not None:
+        return _paypal_client_instance
+
+    mode = get_paypal_mode()
+    if mode in ("live", "sandbox"):
+        client_id = os.environ.get("PAYPAL_CLIENT_ID", "")
+        client_secret = os.environ.get("PAYPAL_CLIENT_SECRET", "")
+        base_url = os.environ.get("PAYPAL_BASE_URL", "")
+        env = "sandbox" if mode == "sandbox" or "sandbox" in base_url else "live"
+        return PayPalHttpClient(client_id=client_id, client_secret=client_secret, environment=env)
+
+    _paypal_client_instance = MockPayPalClient()
+    return _paypal_client_instance
+
+
+def set_paypal_client(client: Optional[PayPalClientInterface]) -> None:
+    """Explicitly injects or overrides PayPal client (useful for tests)."""
+    global _paypal_client_instance
+    _paypal_client_instance = client
+
+
+def reset_paypal_client() -> None:
+    """Resets cached PayPal client instance."""
+    global _paypal_client_instance
+    _paypal_client_instance = None
+
 

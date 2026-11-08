@@ -132,6 +132,7 @@ CREATE TABLE agent_runs (
     agent_id TEXT NOT NULL,
     idempotency_key TEXT UNIQUE NOT NULL,
     request_hash TEXT NOT NULL,
+    user_prompt TEXT,            -- Stored for audit trail; excluded from public DTOs
     worker_id TEXT,
     queued_at REAL NOT NULL,
     started_at REAL,
@@ -159,6 +160,7 @@ CREATE TABLE purchases (
     merchant_ids_json TEXT NOT NULL,
     budget_day TEXT NOT NULL,
     create_request_id TEXT NOT NULL UNIQUE,
+    capture_boot_id TEXT,        -- Idempotency fence for capture dispatch on worker restart
     paypal_order_id TEXT,
     approval_url TEXT,
     state_entered_at REAL NOT NULL,
@@ -208,6 +210,7 @@ CREATE TABLE financial_facts (
     created_at TEXT NOT NULL,
     FOREIGN KEY(purchase_id) REFERENCES purchases(id)
 );
+CREATE INDEX idx_financial_facts_budget ON financial_facts(agent_id, budget_day, currency);
 
 -- 8. Rebuildable Budget Accounting Projection
 CREATE TABLE budget_accounting (
@@ -269,12 +272,12 @@ CREATE TABLE events (
 );
 
 -- 12. Immutability Triggers
-CREATE TRIGGER abort_ledger_update BEFORE UPDATE ON ledger BEGIN SELECT RAISE(ABORT, 'Ledger entries are strictly immutable'); END;
-CREATE TRIGGER abort_ledger_delete BEFORE DELETE ON ledger BEGIN SELECT RAISE(ABORT, 'Ledger entries cannot be deleted'); END;
-CREATE TRIGGER abort_financial_facts_update BEFORE UPDATE ON financial_facts BEGIN SELECT RAISE(ABORT, 'Financial facts are strictly immutable'); END;
-CREATE TRIGGER abort_financial_facts_delete BEFORE DELETE ON financial_facts BEGIN SELECT RAISE(ABORT, 'Financial facts cannot be deleted'); END;
-CREATE TRIGGER abort_policy_history_update BEFORE UPDATE ON policy_history BEGIN SELECT RAISE(ABORT, 'Policy history is strictly immutable'); END;
-CREATE TRIGGER abort_policy_history_delete BEFORE DELETE ON policy_history BEGIN SELECT RAISE(ABORT, 'Policy history cannot be deleted'); END;
+CREATE TRIGGER IF NOT EXISTS abort_ledger_update BEFORE UPDATE ON ledger BEGIN SELECT RAISE(ABORT, 'Ledger entries are strictly immutable'); END;
+CREATE TRIGGER IF NOT EXISTS abort_ledger_delete BEFORE DELETE ON ledger BEGIN SELECT RAISE(ABORT, 'Ledger entries cannot be deleted'); END;
+CREATE TRIGGER IF NOT EXISTS abort_financial_facts_update BEFORE UPDATE ON financial_facts BEGIN SELECT RAISE(ABORT, 'Financial facts are strictly immutable'); END;
+CREATE TRIGGER IF NOT EXISTS abort_financial_facts_delete BEFORE DELETE ON financial_facts BEGIN SELECT RAISE(ABORT, 'Financial facts cannot be deleted'); END;
+CREATE TRIGGER IF NOT EXISTS abort_policy_history_update BEFORE UPDATE ON policy_history BEGIN SELECT RAISE(ABORT, 'Policy history is strictly immutable'); END;
+CREATE TRIGGER IF NOT EXISTS abort_policy_history_delete BEFORE DELETE ON policy_history BEGIN SELECT RAISE(ABORT, 'Policy history cannot be deleted'); END;
 ```
 
 ---
@@ -449,10 +452,17 @@ New v4.2.2 Mandatory Scenarios (V22-01 to V22-18):
 
 ### Automated Test Suite Execution
 ```bash
-# 1. Activate Virtual Environment
+# 1. Zero-Dependency Invocation (no virtualenv required, uses system Python)
+python -m unittest discover -s backend/tests -t . -p "test_*.py" -v
+
+# Sub-suite targeting:
+python -m unittest discover -s backend/tests/unit -t . -p "test_*.py" -v
+python -m unittest discover -s backend/tests/integration -t . -p "test_*.py" -v
+
+# 2. Virtualenv + pytest Invocation (requires pip install -r requirements.txt)
 source .venv/bin/activate  # Or .venv\Scripts\Activate.ps1 on Windows
 
-# 2. Run All Unit, Property, Loop Guard, and Contract Tests
+# Run All Unit, Property, Loop Guard, and Contract Tests
 pytest backend/tests/unit backend/tests/property backend/tests/loop_guard backend/tests/contract -v
 
 # 3. Run Concurrency, Crash, and Adversarial Suites (53 Scenarios)
@@ -461,7 +471,7 @@ pytest backend/tests/concurrency backend/tests/integration backend/tests/e2e_api
 # 4. Run Playwright E2E UI Tests
 pytest e2e/ -v
 
-# 5. Full Release Verification Target
+# 5. Full Release Verification Target (uses python -m unittest under the hood)
 make test
 ```
 

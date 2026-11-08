@@ -6,7 +6,7 @@ Enforces Invariant 4:
 """
 
 import sqlite3
-from typing import Tuple
+from typing import Optional, Tuple
 
 
 MAX_ACTIVE_RUNS_TOTAL = 8           # 4 workers running + 4 queue capacity
@@ -30,7 +30,8 @@ def check_and_admit_run(
     idempotency_key: str,
     request_hash: str,
     run_id: str,
-    now: float
+    now: float,
+    user_prompt: Optional[str] = None
 ) -> Tuple[bool, str]:
     """
     Atomically checks active run limits and inserts agent_run record under BEGIN IMMEDIATE.
@@ -72,10 +73,11 @@ def check_and_admit_run(
     conn.execute(
         """
         INSERT INTO agent_runs (
-            id, tenant_id, agent_id, idempotency_key, request_hash, queued_at, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'QUEUED', ?);
+            id, tenant_id, agent_id, idempotency_key, request_hash, user_prompt,
+            queued_at, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?);
         """,
-        (run_id, tenant_id, agent_id, idempotency_key, request_hash, now, now_iso)
+        (run_id, tenant_id, agent_id, idempotency_key, request_hash, user_prompt, now, now_iso)
     )
 
     return True, "ADMITTED"

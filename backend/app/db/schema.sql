@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     agent_id TEXT NOT NULL,
     idempotency_key TEXT UNIQUE NOT NULL,
     request_hash TEXT NOT NULL,
+    user_prompt TEXT,
     worker_id TEXT,
     queued_at REAL NOT NULL,
     started_at REAL,
