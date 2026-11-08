@@ -152,3 +152,4 @@ def revoke_credential(conn: sqlite3.Connection, credential_id: str, tenant_id: s
         (now_iso, credential_id, tenant_id)
     )
     return cur.rowcount == 1
+

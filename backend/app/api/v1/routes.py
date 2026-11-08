@@ -484,3 +484,4 @@ def unfreeze_agent(
             raise HTTPException(status_code=404, detail="Target agent policy not found.")
 
     return {"agent_id": target_agent, "tenant_id": cred.tenant_id, "frozen": False}
+

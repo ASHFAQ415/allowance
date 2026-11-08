@@ -468,7 +468,7 @@ class TestWorkflowStep3b(unittest.TestCase):
 
                     test_c = create_connection(r_db)
                     try:
-                        has_pol = test_c.execute("SELECT COUNT(*) AS c FROM policy;").fetchone()["c"]
+                        has_pol = test_c.execute("SELECT COUNT(*) AS c FROM policy WHERE agent_id = 'default';").fetchone()["c"]
                         self.assertEqual(has_pol, 1)
                     finally:
                         test_c.close()

@@ -40,6 +40,18 @@ CREATE TABLE IF NOT EXISTS tenant_memberships (
     UNIQUE(tenant_id, user_id)
 );
 
+-- 2b. Supported Onboarded Merchants with PayPal Payee Routing
+CREATE TABLE IF NOT EXISTS merchants (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    payee_email TEXT NOT NULL,
+    sandbox_merchant_id TEXT NOT NULL,
+    live_merchant_id TEXT,
+    category TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active', -- active, suspended, pending_onboarding
+    created_at TEXT NOT NULL
+);
+
 -- 3. Tenant Agents & Scoped Credentials
 CREATE TABLE IF NOT EXISTS agents (
     id TEXT PRIMARY KEY,
@@ -249,11 +261,52 @@ CREATE TABLE IF NOT EXISTS events (
     created_at TEXT NOT NULL
 );
 
--- 12. Immutability Triggers
+-- 12. Formal Double-Entry General Ledger
+CREATE TABLE IF NOT EXISTS chart_of_accounts (
+    account_number INTEGER PRIMARY KEY,
+    account_name TEXT NOT NULL,
+    account_type TEXT NOT NULL, -- ASSET, LIABILITY, EQUITY, EXPENSE
+    description TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS journal_entries (
+    id TEXT PRIMARY KEY,
+    source_event_key TEXT UNIQUE NOT NULL,
+    tenant_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    purchase_id TEXT,
+    event_type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_lookup ON journal_entries(tenant_id, agent_id, created_at);
+
+CREATE TABLE IF NOT EXISTS journal_entry_lines (
+    id TEXT PRIMARY KEY,
+    entry_id TEXT NOT NULL,
+    line_number INTEGER NOT NULL,
+    account_number INTEGER NOT NULL,
+    debit_cents INTEGER NOT NULL DEFAULT 0,
+    credit_cents INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(entry_id) REFERENCES journal_entries(id),
+    FOREIGN KEY(account_number) REFERENCES chart_of_accounts(account_number),
+    CHECK(debit_cents >= 0 AND credit_cents >= 0),
+    CHECK(debit_cents > 0 OR credit_cents > 0),
+    UNIQUE(entry_id, line_number)
+);
+CREATE INDEX IF NOT EXISTS idx_journal_lines_account ON journal_entry_lines(account_number, entry_id);
+
+-- 13. Immutability Triggers
 CREATE TRIGGER IF NOT EXISTS abort_ledger_update BEFORE UPDATE ON ledger BEGIN SELECT RAISE(ABORT, 'Ledger entries are strictly immutable'); END;
 CREATE TRIGGER IF NOT EXISTS abort_ledger_delete BEFORE DELETE ON ledger BEGIN SELECT RAISE(ABORT, 'Ledger entries cannot be deleted'); END;
 CREATE TRIGGER IF NOT EXISTS abort_financial_facts_update BEFORE UPDATE ON financial_facts BEGIN SELECT RAISE(ABORT, 'Financial facts are strictly immutable'); END;
 CREATE TRIGGER IF NOT EXISTS abort_financial_facts_delete BEFORE DELETE ON financial_facts BEGIN SELECT RAISE(ABORT, 'Financial facts cannot be deleted'); END;
 CREATE TRIGGER IF NOT EXISTS abort_policy_history_update BEFORE UPDATE ON policy_history BEGIN SELECT RAISE(ABORT, 'Policy history is strictly immutable'); END;
 CREATE TRIGGER IF NOT EXISTS abort_policy_history_delete BEFORE DELETE ON policy_history BEGIN SELECT RAISE(ABORT, 'Policy history cannot be deleted'); END;
+CREATE TRIGGER IF NOT EXISTS abort_journal_entries_update BEFORE UPDATE ON journal_entries BEGIN SELECT RAISE(ABORT, 'Journal entries are strictly immutable'); END;
+CREATE TRIGGER IF NOT EXISTS abort_journal_entries_delete BEFORE DELETE ON journal_entries BEGIN SELECT RAISE(ABORT, 'Journal entries cannot be deleted'); END;
+CREATE TRIGGER IF NOT EXISTS abort_journal_lines_update BEFORE UPDATE ON journal_entry_lines BEGIN SELECT RAISE(ABORT, 'Journal lines are strictly immutable'); END;
+CREATE TRIGGER IF NOT EXISTS abort_journal_lines_delete BEFORE DELETE ON journal_entry_lines BEGIN SELECT RAISE(ABORT, 'Journal lines cannot be deleted'); END;
 

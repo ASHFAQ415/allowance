@@ -15,3 +15,4 @@ __all__ = [
     "authenticate_api_key",
     "revoke_credential",
 ]
+
