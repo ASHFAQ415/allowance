@@ -2,7 +2,7 @@
 
 > **"Give your AI agent an allowance, not your wallet."**  
 > **Repository:** [https://github.com/ASHFAQ415/allowance](https://github.com/ASHFAQ415/allowance)  
-> **Date:** November 2026  
+> **Date:** November 2026 (Updated post-PR #1 merge)  
 > **Target Audience:** Collaborators, Forkers, Reviewers, and AI Coding Agents (Cursor, Copilot, Antigravity, Claude Code)
 
 ---
@@ -14,7 +14,7 @@
 Modern LLM agents are increasingly tasked with autonomous purchasing, booking, and procurement. However, granting an AI direct access to credit cards or raw payment APIs presents unacceptable financial risks: hallucinations, prompt injection, blind retry loops, merchant spoofing, and runaway budget exhaustion.
 
 ALLOWANCE solves this by enforcing a strict separation of powers:
-- **ShopMind:** An unprivileged, sandboxed product discovery agent that proposes purchases based on catalog items. It has **zero** access to payment credentials, cannot trigger capture calls, and cannot alter policies.
+- **ShopMind:** An unprivileged, sandboxed product discovery agent that proposes purchases based on catalog items. It has **zero** access to payment credentials, cannot trigger capture calls, and cannot alter policies (enforced at both runtime and AST compile-time).
 - **PayPilot:** A deterministic, mathematical financial policy engine that rigorously validates all purchase requests against corporate spending rules (Rules R0–R6, Checkpoints P1–P4).
 - **Payment Safety Layer:** A hardened PayPal Orders v2 integration governed by exclusive-claim state machines, append-only financial journal ledgers, idempotency markers (`MAY_HAVE_BEEN_SENT`), and an absolute prohibition against blind capture retries.
 - **Unified Control Dashboard:** A real-time React 18 + Tailwind CSS interface providing human-in-the-loop oversight, an immediate Emergency Kill Switch, real-time audit logs, purchase progress tracking, and double-entry financial journal streams.
@@ -33,32 +33,46 @@ allowance/
 │   │   ├── agent/
 │   │   │   ├── catalog.py                  <-- Catalog database, search & token scoring
 │   │   │   ├── loop.py                     <-- Claude-powered tool loop with deterministic fallback
-│   │   │   └── tools.py                    <-- Propose purchase & search tools
+│   │   │   └── tools.py                    <-- Propose purchase & search tools (zero price-injection)
 │   │   ├── db/
+│   │   │   ├── bootstrap.py                <-- Idempotent schema bootstrapper & default policies
 │   │   │   ├── connection.py               <-- SQLite WAL mode & atomic transactions
 │   │   │   ├── financial_journal.py        <-- Append-only double-entry financial ledger
 │   │   │   ├── purchases.py                <-- Purchase lifecycle persistence & queries
-│   │   │   └── schema.py                   <-- DB DDL: tables, indexes, constraints
-│   │   ├── engine/
+│   │   │   └── schema.sql                  <-- DB DDL: tables, indexes, immutability triggers
+│   │   ├── orchestrator/
 │   │   │   ├── admission.py                <-- Concurrency limits & queue rate fencing
-│   │   │   ├── checkpoints.py              <-- P1 (Pre-auth), P2 (Escalation), P3 (Post-approval), P4 (Recon)
-│   │   │   ├── policy.py                   <-- Deterministic Rules R0 (Kill Switch) through R6 (Category)
+│   │   │   ├── capture_lifecycle.py        <-- Safe capture flow, tamper verification & read-only recon
+│   │   │   ├── core.py                     <-- P1-P4 orchestration pipeline & buyer return handling
+│   │   │   ├── queue.py                    <-- Bounded worker pool & queue dispatch
+│   │   │   ├── rechecks.py                 <-- Checkpoints P2/P3/P4 pure policy re-eval & self-exclusion
 │   │   │   └── state_machine.py            <-- PurchaseState transitions & lease acquisition
 │   │   ├── paypal/
-│   │   │   ├── client.py                   <-- PayPal Orders v2 API client (Sandbox / Live)
+│   │   │   ├── client.py                   <-- PayPal client factory (Mock / Sandbox / Live)
 │   │   │   ├── exclusive_claim.py          <-- Atomic CAS lease claiming & fence protection
-│   │   │   ├── mock_service.py             <-- Authoritative PayPal mock for sandbox testing
-│   │   │   └── reconciliation.py           <-- Read-only GET bounded recovery loop
-│   │   └── api/                            <-- REST endpoints (agent, policies, purchases, kill switch)
+│   │   │   └── mock_service.py             <-- Authoritative PayPal mock with fault injectors
+│   │   ├── api/
+│   │   │   ├── auth.py                     <-- Constant-time token verification & rate limits
+│   │   │   ├── dto.py                      <-- Strict Pydantic input/output schemas
+│   │   │   └── routes.py                   <-- REST endpoints (agent, policies, purchases, kill switch)
+│   │   └── runtime.py                      <-- App runtime worker pool & FastAPI lifespan wiring
 │   └── tests/
-│       ├── test_adversarial_concurrency.py <-- Race conditions, double capture, journal integrity
-│       ├── test_agent_loop.py              <-- Claude & fallback agent execution
-│       ├── test_checkpoints.py             <-- P1–P4 deterministic enforcement
-│       ├── test_engine_state_machine.py    <-- Monotonic state transitions & invalid edges
-│       ├── test_exclusive_claim.py         <-- Lock takeover & lease expiration fencing
-│       ├── test_financial_journal.py       <-- Invariant 2 & 3 append-only math tests
-│       ├── test_paypal_reconciliation.py   <-- Read-only reconciliation under uncertainty
-│       └── test_policy_engine.py           <-- Rules R0 through R6 edge cases
+│       ├── unit/
+│       │   ├── test_agent_isolation.py     <-- AST boundary proof (no imports of db/paypal/secrets)
+│       │   ├── test_agent_loop.py          <-- Claude & fallback agent execution
+│       │   └── test_policy_engine.py       <-- Rules R0 through R6 edge cases
+│       └── integration/
+│           ├── test_adversarial_concurrency.py <-- Race conditions, double capture, journal integrity
+│           ├── test_adversarial_scenarios.py   <-- Freeze races, tamper detection, lease takeover
+│           ├── test_checkpoints.py             <-- P1–P4 deterministic enforcement
+│           ├── test_engine_state_machine.py    <-- Monotonic state transitions & invalid edges
+│           ├── test_exclusive_claim.py         <-- Lock takeover & lease expiration fencing
+│           ├── test_financial_journal.py       <-- Invariants 2 & 3 append-only math tests
+│           ├── test_paypal_contract.py         <-- Protocol contracts: 429, 500, write errors, timeouts
+│           ├── test_paypal_reconciliation.py   <-- Read-only reconciliation under uncertainty
+│           ├── test_runtime_pipeline.py        <-- Worker queue saturation & idempotent replays
+│           ├── test_transaction_atomicity.py   <-- SQLite WAL transactional rollbacks
+│           └── test_workflow_step3b.py         <-- Full end-to-end buyer return & policy update
 ├── frontend/
 │   ├── src/
 │   │   ├── components/                     <-- Modular UI cards, ledger tables, order cards
@@ -80,14 +94,30 @@ allowance/
 
 ## 3. What Was Recently Changed & Solved (Changelog)
 
-Before recent updates, several critical edge cases affected usability during demo testing. Here is what was diagnosed and fixed:
+### Update 1: PR #1 Merge (`impl/p0-runtime-wiring`)
+- **Contributor:** Lohith Padavala (`LohithP07`), merged into `main`.
+- **Runtime Worker Pool & Lifespan Wiring (`backend/app/runtime.py`):**
+  - Integrated `WorkerPoolManager` into FastAPI's `lifespan(app)` context manager to start workers on boot and drain gracefully on shutdown.
+  - Workers run claimed jobs in isolated worker threads with dedicated, short-lived SQLite database connections.
+- **Pre-Order (P3) and Pre-Capture (P4) Policy Re-evaluation (`backend/app/orchestrator/rechecks.py`):**
+  - Implemented pure policy re-checks before creating PayPal orders and before capture POST.
+  - Implemented Invariant 3 self-exclusion: active purchase reservation is excluded exactly once during re-evaluation so an approved purchase never denies itself.
+- **PayPal Client Mode Selection (`backend/app/paypal/client.py`):**
+  - Added factory `get_paypal_mode()` and `get_paypal_client()` supporting `PAYPAL_MODE=mock|sandbox|live`.
+  - Added extended fault injectors for all 53 adversarial test matrix scenarios (tamper simulation, mid-POST TCP write error, capture detail mismatch).
+- **AST Agent Sandbox Boundary Proof (`backend/tests/unit/test_agent_isolation.py`):**
+  - Proves statically via Python AST inspection that `backend/app/agent/` modules cannot import `db`, `orchestrator`, `paypal`, or access secret environment variables.
+- **Review Bug Fix (`3a37591`):**
+  - Caught and fixed `TypeError: HTTPException.__init__() got an unexpected keyword argument 'headers'` in standard library fallback stub in `backend/app/api/routes.py`.
+- **Full Test Suite Expansion:**
+  - Expanded test matrix from 72 to **114 automated tests** (100% passing).
 
-### Fix 1: Search Fallback & Price Modifier Bug ($45 vs. $6)
+### Update 2: Search Fallback & Price Modifier Bug ($45 vs. $6)
 - **Problem:** When sending prompts such as `"Find trail running shoes under $45 from approved store"`, the search agent returned `coffee_paper_filters` for `$6.00` instead of the expected `Trail Running Shoes` (`$45.00`).
 - **Root Cause:** In `backend/app/agent/catalog.py`, `search_catalog_data` performed a rigid exact substring match (`if query.lower() in item.name.lower()`). Because the full conversational sentence was passed as the search query, no items matched by substring, triggering the fallback heuristic to pick the cheapest item in the catalog ($6 coffee filters).
-- **Solution:** Upgraded search in `backend/app/agent/catalog.py` to extract price constraints (e.g. `under $45` $\rightarrow \le 4500$ cents) and score items using tokenized keyword overlap (stripping conversational filler words). `run_deterministic_fallback` in `backend/app/agent/loop.py` was aligned to use this tokenized search. Now accurately returns `Trail Running Shoes` at `$45.00`.
+- **Solution:** Upgraded search in `backend/app/agent/catalog.py` to extract price constraints (e.g. `under $45` $\rightarrow \le 4500$ cents) and score items using tokenized keyword overlap (stripping conversational filler words). Now accurately returns `Trail Running Shoes` at `$45.00`.
 
-### Fix 2: Emergency Freeze (Kill Switch) UI Visibility
+### Update 3: Emergency Freeze (Kill Switch) UI Visibility
 - **Problem:** When the Kill Switch (Rule R0) was activated and a user submitted a purchase request, the resulting blocked purchase was invisible in the UI.
 - **Root Cause:** The dashboard's orders section was hardcoded to filter exclusively for `status === 'PENDING_APPROVAL'`, causing `BLOCKED` and `CAPTURED` orders to disappear from the card feed.
 - **Solution:** 
@@ -95,20 +125,12 @@ Before recent updates, several critical edge cases affected usability during dem
   2. Enriched blocked cards with explicit, human-readable rejection reasons (e.g., `Emergency spending freeze is ACTIVE (Rule R0)` or `Merchant 'DarkWeb Store' is not in allowlist`).
   3. Added an animated full-width **Emergency Kill Switch Banner** across the top of the interface when the freeze is active, with an optimistic toggle for instant feedback.
 
-### Fix 3: One-Click Demo Scenarios
-- **Addition:** Added 4 quick-select pill buttons directly under the chat input in `frontend/src/App.tsx`:
+### Update 4: Interactive One-Click Demo Scenarios
+- Added 4 quick-select pill buttons directly under the chat input in `frontend/src/App.tsx`:
   - 🏃 **Trail Shoes ($45)** — Triggers an autonomous auto-approval and immediate PayPal capture.
   - 👟 **Road Flats ($90)** — Triggers Rule R2 escalation for human supervisor review (exceeds $50 auto-limit).
   - ⚠️ **DarkWeb Store ($15)** — Demonstrates deterministic merchant block via Rule R4.
   - ☕ **2x Coffee Beans ($44)** — Verifies multi-quantity cart arithmetic and budget compliance.
-
-### Fix 4: Concurrency & Database Foreign Key Constraints
-- **Problem:** Several tests in `backend/tests/test_adversarial_concurrency.py` failed due to foreign key violations on `agent_runs` and parameter mismatches in `record_financial_fact`.
-- **Solution:** Updated test fixtures to create prerequisite `agents` and `agent_runs` rows, aligned `record_financial_fact` call signatures with `backend/app/db/financial_journal.py`, and updated lease race tests to verify that exactly one thread captures while nine fail closed.
-
-### Fix 5: Markdown Specification & Repository Hygiene
-- **Cleanup:** Purged 19 obsolete and fragmented draft markdown files (`00_` through `06_`, `ALLOWANCE_V4_1...`, `allowance-implementation-plan-v4.md`). Retained `allowance_v4_2_2_master_plan.md` and `learning_proposal.md` as the authoritative specifications.
-- **Git Repository:** Initialized on `main`, tracked cleanly, and synchronized with GitHub remote `https://github.com/ASHFAQ415/allowance`.
 
 ---
 
@@ -117,13 +139,13 @@ Before recent updates, several critical edge cases affected usability during dem
 | Component | Status | Verification Detail |
 |---|---|---|
 | **Deterministic Policy Engine (R0–R6)** | ✅ Complete | Verified with 100% test coverage for kill switch, limits, whitelist, and budget checks |
-| **Checkpoints P1, P2, P3, P4** | ✅ Complete | Enforces state gating prior to provider calls and post-approval |
-| **PayPal Orders v2 Integration** | ✅ Complete | Exclusive lease claiming, mock service, and idempotent recovery |
+| **Checkpoints P1, P2, P3, P4** | ✅ Complete | Enforces state gating prior to provider calls and post-approval with self-exclusion |
+| **PayPal Orders v2 Client (Mock/Sandbox/Live)** | ✅ Complete | Factory selection via `PAYPAL_MODE`; exclusive lease claiming; idempotent recovery |
 | **Append-Only Financial Journal** | ✅ Complete | Zero floating-point math; integer cents; double-entry journal balance tracking |
 | **Admission Queue & Concurrency Fencing** | ✅ Complete | Atomic transaction claim; queue expiry enforcement; CAS leasing |
-| **Agent Discovery Loop (ShopMind)** | ✅ Complete | Claude tool-calling loop + tokenized deterministic fallback |
+| **AST Agent Sandbox Boundary** | ✅ Complete | Verified compile-time isolation preventing DB, payment API, or credential access |
 | **Frontend Dashboard (React 18)** | ✅ Complete | Single-page real-time dashboard; compiled with Vite (0 build errors) |
-| **Automated Test Suite** | ✅ Complete | **72 / 72 tests passing** across 8 test suites in ~3.2 seconds |
+| **Automated Test Suite** | ✅ Complete | **114 / 114 tests passing** across 14 test suites in ~6.8 seconds |
 | **Local Standalone Dev Server** | ✅ Active | Running on `http://localhost:8000` via `scripts/dev_server.py` |
 
 ---
@@ -139,10 +161,10 @@ The project is designed to be completely zero-friction. You do not need external
 ### Step 1: Run the Automated Test Suite
 From the repository root, run:
 ```bash
-# Set PYTHONPATH to project root and run all 72 tests
+# Set PYTHONPATH to project root and run all 114 tests
 python -m unittest discover -s backend/tests -t . -p "test_*.py"
 ```
-*Expected output:* `Ran 72 tests in ~3.2s ... OK`.
+*Expected output:* `Ran 114 tests in ~6.8s ... OK`.
 
 ### Step 2: Start the Live Dev Server
 The standalone server in `scripts/dev_server.py` serves both the backend JSON REST API and the production frontend assets:
@@ -178,19 +200,25 @@ Every collaborator, contributor, and AI assistant working on this codebase **mus
 
 If you or your AI IDE (Cursor, Copilot, Antigravity) are extending this repository, here is the prioritized development backlog:
 
-### Task Backlog for Contributors
+### Completed Milestones
+- [x] **P0 Runtime Wiring & Worker Pool:** Claimed agent runs processed asynchronously via `WorkerPoolManager` and FastAPI lifespan.
+- [x] **Safe Capture Protocol & Concurrency Fencing:** Atomic CAS capture claims, `MAY_HAVE_BEEN_SENT` marker, read-only reconciliation.
+- [x] **Full 53-Scenario Adversarial Matrix:** 114 automated tests covering tamper detection, freeze races, lease takeovers, and network failures.
+- [x] **PayPal Mode Selection:** Factory supporting `PAYPAL_MODE=mock|sandbox|live`.
 
-#### Task 1: Real PayPal Sandbox Integration Toggle
-- **Current State:** The system uses `backend/app/paypal/mock_service.py` with full latency and error injection capabilities.
-- **Next Step:** Wire in live PayPal Sandbox credentials via `.env` (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`). Update `backend/app/paypal/client.py` to seamlessly switch between mock mode and real PayPal OAuth 2.0 + Orders v2 endpoints based on config flags.
+### Remaining Milestones
 
-#### Task 2: Multi-Agent Allowance Profiles
+#### Task 1: Live PayPal Sandbox Execution & Receipt Verification
+- **Status:** Architecture ready (`PAYPAL_MODE=sandbox`).
+- **Next Step:** Run `scripts/paypal_smoke.py` against live PayPal Sandbox developer credentials (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`), execute a real sandbox order creation & capture, and save the signed provider response in `docs/sandbox-verification.md`.
+
+#### Task 2: Automated Playwright E2E UI Tests
+- **Status:** Manual UI verified.
+- **Next Step:** Implement headless browser tests (`e2e/test_dashboard.spec.ts`) using Playwright to automatically verify the 4 interactive demo flows (Auto-Approve, Human Escalation, Merchant Block, Kill Switch) against the live dev server.
+
+#### Task 3: Multi-Agent Allowance Profiles
 - **Current State:** Single default agent policy configuration.
 - **Next Step:** Add database support for multiple distinct agents (e.g. `ProcurementAgent`, `TravelAgent`, `CloudOpsAgent`), each with independent daily/monthly allowances, supervisor lists, and category permissions.
-
-#### Task 3: External Catalog Ingestion & MCP Tools
-- **Current State:** In-memory SQLite catalog with 6 verified products and token-based scoring.
-- **Next Step:** Build an MCP (Model Context Protocol) tool or OpenAPI adapter to query external store APIs (e.g. Shopify, BigCommerce, or mock e-commerce REST APIs) dynamically while sanitizing product names and prices.
 
 #### Task 4: Webhook & Mobile Push Notifications for Human Approvals
 - **Current State:** Supervisor approvals are handled synchronously through the React dashboard.
@@ -206,6 +234,6 @@ If you or your AI IDE (Cursor, Copilot, Antigravity) are extending this reposito
 
 When modifying this repository:
 - Run tests before and after your changes: `python -m unittest discover -s backend/tests -t . -p "test_*.py"`.
-- Never modify `backend/app/engine/policy.py` or `backend/app/paypal/exclusive_claim.py` without verifying that concurrency invariants hold.
+- Never modify `backend/app/orchestrator/capture_lifecycle.py` or `backend/app/orchestrator/rechecks.py` without verifying that concurrency invariants hold.
 - Always preserve integer cents for all money representations.
 - Reference `.agents/rules/financial_safety_invariants.md` before making architectural decisions.
