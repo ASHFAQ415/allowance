@@ -55,11 +55,8 @@ def run_deterministic_fallback(query: str) -> Optional[FrozenCart]:
 
     approved_matches = [m for m in matches if m.merchant_id != "merchant_unapproved" and m.in_stock]
     if not approved_matches:
-        # Fall back to first in-stock approved item in catalog
-        all_approved = [m for m in search_catalog_data("", limit=20) if m.merchant_id != "merchant_unapproved" and m.in_stock]
-        if not all_approved:
-            return None
-        approved_matches = all_approved
+        # Invariant: Never fall back to cheapest item when query does not match. Refuse cleanly.
+        return None
 
     # Pick the top-scoring matched product!
     best = approved_matches[0]
@@ -99,7 +96,7 @@ def execute_agent_loop(
     if model_invoker is None:
         cart = run_deterministic_fallback(user_prompt)
         if cart is None:
-            return "FAILED", "no_matching_product", None, [{"event": "fallback_empty"}]
+            return "FAILED", "no_matching_item", None, [{"event": "fallback_empty"}]
         return "COMPLETED", None, cart, [{"event": "deterministic_fallback_selected", "cart_hash": cart.cart_hash}]
 
     messages: List[Dict[str, Any]] = [
@@ -122,7 +119,7 @@ def execute_agent_loop(
             if cart:
                 state.trace.append({"event": "model_error_fallback_success", "error": str(e)})
                 return "COMPLETED", None, cart, state.trace
-            return "FAILED", "model_outage", None, state.trace
+            return "FAILED", "no_matching_item", None, state.trace
 
         # Parse tool calls from model response
         tool_call = response.get("tool_call")
@@ -135,7 +132,7 @@ def execute_agent_loop(
             cart = run_deterministic_fallback(user_prompt)
             if cart:
                 return "COMPLETED", None, cart, state.trace
-            return "FAILED", "no_cart_submitted", None, state.trace
+            return "FAILED", "no_matching_item", None, state.trace
 
         tool_name = tool_call.get("name")
         tool_args = tool_call.get("arguments", {})

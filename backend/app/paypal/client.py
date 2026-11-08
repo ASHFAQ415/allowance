@@ -9,6 +9,7 @@ Enforces Invariant 1:
 
 import json
 import os
+import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
@@ -292,16 +293,25 @@ class MockPayPalClient(PayPalClientInterface):
             self.capture_requests[capture_request_id] = outcome
             return outcome
 
-        # Standard successful capture
+        # Standard successful capture: mirrors PayPal Orders v2 capture schema
         cap_id = f"CAP_{uuid.uuid4().hex[:12].upper()}"
         order["status"] = "COMPLETED"
-        cap_data = {
+        now_ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        capture_obj = {
             "id": cap_id,
             "status": "COMPLETED",
             "amount": order["purchase_units"][0]["amount"],
-            "final_capture": True
+            "final_capture": True,
+            "create_time": now_ts,
+            "update_time": now_ts,
         }
-        self.captures[order_id] = cap_data
+        order["purchase_units"][0]["payments"] = {
+            "captures": [capture_obj]
+        }
+        self.captures[order_id] = capture_obj
+        cap_data = json.loads(json.dumps(order))
+        cap_data["status"] = "COMPLETED"
+        cap_data["capture_id"] = cap_id
         outcome = TransportOutcome(
             success=True,
             status_code=201,

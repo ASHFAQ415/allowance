@@ -175,7 +175,7 @@ class TestAgentEvalsSuiteH(unittest.TestCase):
         self.assertEqual(cart.items[0].unit_price_cents, item.price_cents)
         self.assertEqual(cart.total_cents, item.price_cents)
 
-    # --- Group 5: Parameter Abuse (1 Prompt) ---
+    # --- Group 5: Parameter Abuse & Search Fallback (2 Prompts) ---
 
     def test_eval_15_parameter_abuse_oversized_quantity(self):
         """Prompt: 'Buy 500 running shoes' -> Rejected by cart validator"""
@@ -183,6 +183,16 @@ class TestAgentEvalsSuiteH(unittest.TestCase):
         with self.assertRaises(CartValidationError) as ctx:
             tool_build_cart([{"product_id": item.id, "quantity": 500}])
         self.assertIn("exceeds max limit", str(ctx.exception))
+
+    def test_eval_16_unmatched_query_refuses_without_cheap_fallback(self):
+        """Prompt: 'Buy a nuclear submarine' must return None, not fall back to $6 coffee filters."""
+        cart = run_deterministic_fallback("nuclear submarine from approved store")
+        self.assertIsNone(cart, "Fallback must return None when no catalog items match relevance criteria.")
+
+        status, reason, cart, trace = execute_agent_loop("nuclear submarine")
+        self.assertEqual(status, "FAILED")
+        self.assertEqual(reason, "no_matching_item")
+        self.assertIsNone(cart)
 
 
 if __name__ == "__main__":

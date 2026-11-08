@@ -20,6 +20,37 @@ from .rechecks import get_agent_policy, reevaluate_purchase, release_purchase_re
 EXPECTED_MERCHANT_ID = "MOCK_MERCHANT_123"
 
 
+def extract_nested_capture_info(data: dict) -> Tuple[Optional[str], Optional[float], Optional[str]]:
+    """
+    Extracts (capture_id, amount_value, currency_code) from PayPal Orders v2 response data.
+    PayPal Orders v2 capture POST response returns an Order object with nested captures:
+    purchase_units[0].payments.captures[0]
+    Fall back to top-level fields if nested captures are absent (e.g., legacy mock objects).
+    """
+    if not isinstance(data, dict):
+        return None, None, None
+    try:
+        units = data.get("purchase_units", [])
+        if units and isinstance(units, list):
+            payments = units[0].get("payments", {})
+            captures = payments.get("captures", [])
+            if captures and isinstance(captures, list) and len(captures) > 0:
+                first_cap = captures[0]
+                cap_id = first_cap.get("id")
+                amt_dict = first_cap.get("amount", {})
+                val = float(amt_dict.get("value", 0)) if amt_dict.get("value") is not None else None
+                curr = amt_dict.get("currency_code")
+                return cap_id, val, curr
+    except Exception:
+        pass
+
+    cap_id = data.get("capture_id") or data.get("id")
+    amt_dict = data.get("amount", {})
+    val = float(amt_dict.get("value", 0)) if isinstance(amt_dict, dict) and amt_dict.get("value") is not None else None
+    curr = amt_dict.get("currency_code") if isinstance(amt_dict, dict) else None
+    return cap_id, val, curr
+
+
 class VerificationError(Exception):
     """Raised when pre-capture verification of order amount, currency, or payee fails."""
     pass
@@ -227,7 +258,17 @@ def execute_capture_flow(
 
         # Case A: Definitive Success (HTTP 200/201 with status COMPLETED)
         if cap_outcome.success and cap_outcome.data and cap_outcome.data.get("status") == "COMPLETED":
-            cap_id = cap_outcome.data["id"]
+            nested_cap_id, cap_amt, cap_curr = extract_nested_capture_info(cap_outcome.data)
+            cap_id = nested_cap_id or cap_outcome.data.get("id")
+
+            # Verify capture amount and currency match purchase total
+            if cap_amt is not None:
+                expected_amt = purchase["total_cents"] / 100.0
+                if abs(cap_amt - expected_amt) > 0.001:
+                    return "CAPTURE_UNKNOWN", "capture_amount_mismatch"
+            if cap_curr is not None and purchase["currency"] and cap_curr != purchase["currency"]:
+                return "CAPTURE_UNKNOWN", "capture_currency_mismatch"
+
             conn.execute(
                 """
                 UPDATE purchases
@@ -365,24 +406,17 @@ def execute_read_only_reconciliation(
 
     # Authoritative resolution:
     if order_status == "COMPLETED":
-        # Verify capture details match purchase total (Scenario V22-05)
-        try:
-            units = order.get("purchase_units", [])
-            if units:
-                unit = units[0]
-                payments = unit.get("payments", {})
-                captures = payments.get("captures", [])
-                if captures:
-                    cap = captures[0]
-                    cap_amount = float(cap.get("amount", {}).get("value", 0))
-                    expected_val = purchase["total_cents"] / 100.0
-                    if abs(cap_amount - expected_val) > 0.001:
-                        return "CAPTURE_UNKNOWN", "capture_amount_mismatch"
-        except Exception:
-            return "CAPTURE_UNKNOWN", "capture_detail_verification_error"
+        # Extract genuine nested capture id and verify amount/currency (Scenario V22-05)
+        nested_cap_id, cap_amount, cap_curr = extract_nested_capture_info(order)
+        if cap_amount is not None:
+            expected_val = purchase["total_cents"] / 100.0
+            if abs(cap_amount - expected_val) > 0.001:
+                return "CAPTURE_UNKNOWN", "capture_amount_mismatch"
+        if cap_curr is not None and purchase["currency"] and cap_curr != purchase["currency"]:
+            return "CAPTURE_UNKNOWN", "capture_currency_mismatch"
 
-        # Capture completed on PayPal! Resolve to CAPTURED
-        cap_id = f"CAP_RECON_{uuid.uuid4().hex[:8]}"
+        # Capture completed on PayPal! Resolve to CAPTURED using genuine provider capture ID
+        cap_id = nested_cap_id or f"CAP_RECON_{uuid.uuid4().hex[:8]}"
         with transactional_session(conn):
             conn.execute("UPDATE purchases SET status = 'CAPTURED', updated_at = ? WHERE id = ?;", (now_iso, purchase_id))
             conn.execute("UPDATE capture_operations SET state = 'RESOLVED_SUCCESS', paypal_capture_id = ?, updated_at = ? WHERE purchase_id = ?;", (cap_id, now_iso, purchase_id))

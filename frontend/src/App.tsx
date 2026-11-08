@@ -126,7 +126,11 @@ export default function App() {
         headers: { 'X-Admin-Token': adminToken }
       });
       if (res.ok) {
-        setTimeline(prev => [`[${new Date().toLocaleTimeString()}] ✅ Admin approved purchase ${purchaseId.slice(0, 8)}. PayPilot Checkpoint P2 passed → PayPal captured!`, ...prev]);
+        setTimeline(prev => [
+          `[${new Date().toLocaleTimeString()}] 💳 Step 2: PayPal buyer consent confirmed → capture finalized!`,
+          `[${new Date().toLocaleTimeString()}] ✅ Step 1: Supervisor approved purchase ${purchaseId.slice(0, 8)} (PayPilot Checkpoint P2 passed).`,
+          ...prev
+        ]);
         fetchDashboardData();
       }
     } catch (err) {
@@ -376,13 +380,23 @@ export default function App() {
                       </div>
                       <p className="text-xs text-slate-400">Merchants: {pur.merchant_ids.join(', ')} • Qty: {pur.items?.[0]?.quantity || 1}</p>
                       <p className="text-[11px] text-slate-500 font-mono">Purchase ID: {pur.id.slice(0, 8)}... (Committed Budget Held)</p>
+                      <div className="flex items-center gap-3 mt-1.5 text-[11px]">
+                        <span className="text-amber-300 flex items-center gap-1 font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                          Step 1: Supervisor Approval (PayPilot P2)
+                        </span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-400">
+                          Step 2: PayPal Buyer Consent
+                        </span>
+                      </div>
                     </div>
                     <button
                       onClick={() => handleApprove(pur.id)}
                       className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow"
                     >
                       <CheckCircle2 className="w-4 h-4" />
-                      Approve Purchase
+                      Authorize & Complete
                     </button>
                   </div>
                 ))
