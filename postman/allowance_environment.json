@@ -1,0 +1,49 @@
+{
+  "id": "e6b61f9d-allowance-env-v5",
+  "name": "Allowance v5.0 Local & Cloud Environment",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "apiKey",
+      "value": "ak_live_dev_test_token_allowance_2026_xyz",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "adminToken",
+      "value": "dev-secret-admin-token-min-32-chars-long-abc-123",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "demoSession",
+      "value": "demo-session-token-allowance-hackathon-2026",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "agentId",
+      "value": "default",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "quoteId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "purchaseId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}

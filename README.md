@@ -7,6 +7,8 @@
 [![Tests Passing](https://img.shields.io/badge/Tests-137%20passing-brightgreen.svg)](#automated-testing)
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![PayPal](https://img.shields.io/badge/PayPal-Orders%20v2%20Sandbox%20Verified-003087.svg)](#paypal-orders-v2-integration)
+[![Postman](https://img.shields.io/badge/Postman-Collection%20v2.1-FF6C37.svg?logo=postman&logoColor=white)](postman/allowance_v5_collection.json)
+[![Render](https://img.shields.io/badge/Render-Blueprint%20Deployable-46E3B7.svg?logo=render&logoColor=white)](render.yaml)
 [![MCP](https://img.shields.io/badge/MCP-JSON--RPC%202.0%20Compatible-orange.svg)](#option-b-model-context-protocol-mcp-server)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -85,6 +87,14 @@ Every operation within Allowance strictly adheres to [`.agents/rules/financial_s
 python scripts/dev_server.py
 ```
 Open **`http://localhost:8000`** in your browser.
+
+### Option C: Run Postman Collection (Automated API Test Suite)
+Import `postman/allowance_v5_collection.json` and `postman/allowance_environment.json` into Postman to execute our automated API test suite covering Quotes, Idempotent Purchases, Human Approvals, and Emergency Kill Switch.
+
+### Option D: 1-Click Cloud Deployment on Render
+Deploy Allowance to Render using the included Infrastructure-as-Code blueprint [`render.yaml`](render.yaml):
+1. Connect this repository to your [Render.com](https://render.com) dashboard.
+2. Select **New > Blueprint** and select this repository. Render automatically builds the multi-stage Docker container and launches the platform with persistent disk storage.
 
 ---
 

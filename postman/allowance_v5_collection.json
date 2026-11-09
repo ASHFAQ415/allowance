@@ -1,0 +1,413 @@
+{
+  "info": {
+    "_postman_id": "f8a12903-b82d-482a-9cb0-allowance-v5",
+    "name": "ALLOWANCE v5.0 — Autonomous Financial Authorization API",
+    "description": "Postman Collection for Allowance v5.0 — The autonomous AI spending control, policy engine, and double-entry financial authorization platform built on PayPal Orders v2 for the PayPal AI Hackathon 2026.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. System Health",
+      "item": [
+        {
+          "name": "GET /health (Service Health Check)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Verifies that the Allowance server and database connection are fully operational."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Health status is ok', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('ok');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Server-Side Quotes (Anti-Price-Injection)",
+      "item": [
+        {
+          "name": "POST /v1/quotes (Request $45 Trail Shoes Quote)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"product_id\": \"shoes_trail_runner\",\n      \"quantity\": 1\n    }\n  ],\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/quotes",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "quotes"]
+            },
+            "description": "Generates an authoritative, server-signed price quote with a 10-minute expiry."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.test('Quote total is exactly $45.00 (4500 cents)', function () {",
+                  "    pm.expect(json.total_cents).to.eql(4500);",
+                  "    pm.expect(json.currency).to.eql('USD');",
+                  "});",
+                  "pm.test('Cart hash and quote ID exist', function () {",
+                  "    pm.expect(json.id).to.be.a('string');",
+                  "    pm.expect(json.cart_hash).to.be.a('string');",
+                  "    pm.environment.set('quoteId', json.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/quotes (Request $90 Road Racing Flats Quote)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"product_id\": \"shoes_road_racer\",\n      \"quantity\": 1\n    }\n  ],\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/quotes",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "quotes"]
+            },
+            "description": "Generates a quote for high-value road racing flats that trigger human review."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.test('Quote total is $90.00 (9000 cents)', function () {",
+                  "    pm.expect(json.total_cents).to.eql(9000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Allowance & Spending Authority",
+      "item": [
+        {
+          "name": "GET /v1/allowance (Inspect Real-Time Budget Status)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/allowance",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "allowance"]
+            },
+            "description": "Returns remaining daily spending allowance, velocity caps, and policy status."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.test('Allowance contains daily budget and limits', function () {",
+                  "    pm.expect(json.daily_budget_cents).to.be.above(0);",
+                  "    pm.expect(json.remaining_allowance_cents).to.be.at.least(0);",
+                  "    pm.expect(json.frozen).to.be.a('boolean');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Purchase Lifecycle & Idempotent Submission",
+      "item": [
+        {
+          "name": "POST /v1/purchase-requests (Submit Purchase Proposal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "postman_req_{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quote_id\": \"{{quoteId}}\",\n  \"purpose\": \"Autonomous replenishment of trail shoes for customer order\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/purchase-requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "purchase-requests"]
+            },
+            "description": "Submits a purchase proposal bound to a verified server quote."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201 Created or 200 OK', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.test('Purchase request has valid ID and status', function () {",
+                  "    pm.expect(json.id).to.be.a('string');",
+                  "    pm.expect(json.status).to.be.oneOf(['AUTO_APPROVED', 'PENDING_APPROVAL', 'CAPTURED']);",
+                  "    pm.environment.set('purchaseId', json.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/purchase-requests/{{purchaseId}} (Get Order Status)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/purchase-requests/{{purchaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "purchase-requests", "{{purchaseId}}"]
+            },
+            "description": "Retrieves the status, audit trail, and PayPal tracking for a purchase request."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.test('Purchase ID matches environment variable', function () {",
+                  "    pm.expect(json.id).to.eql(pm.environment.get('purchaseId'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Human Supervisor Reviews (Checkpoint P2)",
+      "item": [
+        {
+          "name": "POST /v1/purchase-requests/{{purchaseId}}/approve (Supervisor Approval)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/purchase-requests/{{purchaseId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "purchase-requests", "{{purchaseId}}", "approve"]
+            },
+            "description": "Supervisor authorizes a held purchase request to proceed to PayPal buyer consent."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 or 400 (if already captured)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Emergency Kill Switch (Rule R0)",
+      "item": [
+        {
+          "name": "POST /v1/freeze (Activate Emergency Freeze)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Security drill: halting all AI spending\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/freeze",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "freeze"]
+            },
+            "description": "Instantly halts all autonomous agent operations across the system."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.test('Policy is now frozen', function () {",
+                  "    pm.expect(json.frozen).to.eql(true);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/unfreeze (Deactivate Emergency Freeze)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Security drill completed: restoring normal operations\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/unfreeze",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "unfreeze"]
+            },
+            "description": "Restores normal policy operations and autonomous authorization."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.test('Policy is no longer frozen', function () {",
+                  "    pm.expect(json.frozen).to.eql(false);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

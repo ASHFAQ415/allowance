@@ -1,33 +1,35 @@
-# Stage 1: Build Frontend
-FROM node:20-alpine AS frontend-builder
+# Multi-stage production Dockerfile for Allowance v5.0
+# Stage 1: Build React 18 + Tailwind Frontend
+FROM node:18-alpine AS frontend-builder
 WORKDIR /app/frontend
+
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci
+
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Backend Runtime
+# Stage 2: Production Python Runtime
 FROM python:3.11-slim
 WORKDIR /app
 
-# Install tzdata (slim lacks timezone data) and curl
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tzdata \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=. \
+    PORT=8000 \
+    DB_PATH=/data/allowance.db \
+    ALLOW_DEMO_RESET=true
 
-ENV TZ=UTC
-ENV PYTHONUNBUFFERED=1
+# Create data directory for persistent SQLite database
+RUN mkdir -p /data
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy backend application and server scripts
+COPY backend/ backend/
+COPY scripts/ scripts/
 
-COPY backend/ ./backend/
-COPY scripts/ ./scripts/
-COPY .agents/ ./.agents/
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+# Copy pre-built frontend distribution from stage 1
+COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-# Mandatory single-process worker deployment
 EXPOSE 8000
-CMD ["uvicorn", "backend.app.api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 
+# Start zero-dependency full-stack server
+CMD ["python", "scripts/dev_server.py"]
