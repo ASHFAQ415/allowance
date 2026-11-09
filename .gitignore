@@ -30,25 +30,28 @@ env/
 
 # Environment files
 .env
+.env.*
+!.env.example
 .env.local
 
 # Database
-*.sqlite3
-*.sqlite3-wal
-*.sqlite3-shm
+*.sqlite*
 *.db
 *.db-wal
 *.db-shm
 
-# IDE
+# IDE & OS
 .vscode/
 .idea/
 *.swp
 *.swo
+.DS_Store
+Thumbs.db
+ehthumbs.db
 
-# Node / Frontend
+# Node / Frontend (keep dist tracked so judges don't need node)
+node_modules/
 frontend/node_modules/
-frontend/dist/
 frontend/.env.local
 
 # Testing & Coverage
@@ -58,4 +61,3 @@ htmlcov/
 .hypothesis/
 test-results/
 playwright-report/
-
