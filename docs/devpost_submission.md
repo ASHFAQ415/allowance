@@ -52,7 +52,7 @@ We asked: *What if AI agents didn't hold wallets at all? What if we gave them an
 - **Accounting Architecture:** Formal double-entry general ledger with database-level immutability triggers (`abort_journal_entries_update`, `abort_journal_entries_delete`).
 - **AI Integration (MCP & REST):** 
   - Model Context Protocol (MCP) JSON-RPC 2.0 server (`backend/app/mcp/server.py`) exposing 5 bounded tools (`search_products`, `get_product_quote`, `get_allowance`, `request_purchase`, `get_purchase_status`), while strictly withholding capture primitives.
-  - Enterprise REST API v1 (`/v1/*`) secured with SHA-256 hashed API keys (`ak_live_...`).
+  - Enterprise REST API v1 (`/v1/*`) secured with SHA-256 hashed API keys (`ak_test_...`).
 - **Frontend Dashboard:** React 18, Vite, Lucide Icons, and Tailwind CSS.
 - **Infrastructure & Automation:** One-click Windows launcher (`run.bat`), Desktop shortcut generator, Render deployment blueprint (`render.yaml`), and multi-stage Docker container.
 
@@ -75,7 +75,7 @@ In accordance with official hackathon rules for project updates, the following m
 - **Formal Double-Entry Bookkeeping Engine (`backend/app/db/double_entry.py`):** Built from scratch with Chart of Accounts, balancing constraint validation ($\sum \text{debits} = \sum \text{credits}$), and rebuildable projections.
 - **Model Context Protocol (MCP) Server (`backend/app/mcp/server.py`):** Designed and built a standalone JSON-RPC 2.0 MCP server with 5 safe tools.
 - **Enterprise REST API v1 (`backend/app/api/v1/`):** Implemented `/v1/quotes`, `/v1/purchase-requests`, `/v1/allowance`, `/v1/freeze`, and `/v1/unfreeze`.
-- **Cryptographic Credential Subsystem (`backend/app/auth/`):** SHA-256 hashed API keys (`ak_live_...`), constant-time validation (`hmac.compare_digest`), and scoped permissions.
+- **Cryptographic Credential Subsystem (`backend/app/auth/`):** SHA-256 hashed API keys (`ak_test_...`), constant-time validation (`hmac.compare_digest`), and scoped permissions.
 - **PayPal Orders v2 Nested Capture Extraction:** Upgraded response parsing in `capture_lifecycle.py` and `client.py` to parse nested captures (`purchase_units[0].payments.captures[0].id`).
 - **Personal Edition MVP Profile:** Individual $100 daily allowance, $30 auto-threshold, and payee routing.
 - **Test Suite Expansion:** Expanded automated test coverage from 114 to **137 passing tests**.
@@ -92,7 +92,7 @@ In accordance with official hackathon rules for project updates, the following m
 
 #### 2. Render Sponsor Prize
 - **Artifacts:** `render.yaml` (Render Blueprint) and multi-stage `Dockerfile`.
-- **Capabilities:** Production-ready container building the React frontend and Python runtime, with persistent disk storage for SQLite and zero-configuration one-click deployment.
+- **Capabilities:** Production-ready container building the React frontend and Python runtime, with zero-configuration one-click deployment via free-tier compatible `render.yaml` blueprint.
 
 ---
 

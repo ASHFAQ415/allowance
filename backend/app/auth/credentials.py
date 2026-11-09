@@ -33,10 +33,10 @@ def hash_api_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.strip().encode("utf-8")).hexdigest()
 
 
-def generate_api_key(prefix: str = "ak_live") -> Tuple[str, str, str]:
+def generate_api_key(prefix: str = "ak_test") -> Tuple[str, str, str]:
     """
     Generates a secure, cryptographically random API key.
-    Format: ak_live_<32 hex chars>
+    Format: ak_test_<32 hex chars>
     Returns: (raw_key, key_hash, key_prefix)
     """
     token_entropy = secrets.token_hex(24)

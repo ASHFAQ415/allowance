@@ -2,7 +2,8 @@
 
 > **Hard Constraint:** Video length must be **strictly under 3:00 minutes** (e.g. 2:50 - 2:55) to comply with official Devpost rules.  
 > **Platform URL:** `http://localhost:8000` (or your deployed Render URL).  
-> **Screen Setup:** Clean browser window displaying the Allowance dashboard at `http://localhost:8000`.
+> **Screen Setup:** Clean browser window displaying the Allowance dashboard at `http://localhost:8000`.  
+> **Active Profile:** Evaluates against the **Demo Organization Profile** ($300 daily budget, $50 auto-approval threshold, $150 per-tx ceiling).
 
 ---
 

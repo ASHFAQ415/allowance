@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS agent_credentials (
     tenant_id TEXT NOT NULL,
     agent_id TEXT NOT NULL,
     name TEXT NOT NULL,
-    key_hash TEXT UNIQUE NOT NULL, -- SHA-256 of API key (e.g. ak_live_...)
+    key_hash TEXT UNIQUE NOT NULL, -- SHA-256 of API key (e.g. ak_test_...)
     key_prefix TEXT NOT NULL,
     scopes_json TEXT NOT NULL DEFAULT '["propose", "read"]',
     expires_at REAL,

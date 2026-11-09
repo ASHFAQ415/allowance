@@ -10,7 +10,7 @@
     },
     {
       "key": "apiKey",
-      "value": "ak_live_dev_test_token_allowance_2026_xyz",
+      "value": "ak_test_dev_token_allowance_2026_xyz",
       "type": "secret",
       "enabled": true
     },

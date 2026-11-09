@@ -127,7 +127,7 @@ allowance/
   - Implemented Invariant 3 self-exclusion: active purchase reservation is excluded exactly once during re-evaluation so an approved purchase never denies itself.
 - **PayPal Client Mode Selection (`backend/app/paypal/client.py`):**
   - Added factory `get_paypal_mode()` and `get_paypal_client()` supporting `PAYPAL_MODE=mock|sandbox|live`.
-  - Added extended fault injectors for all 53 adversarial test matrix scenarios.
+  - Added extended fault injectors for 53 protocol failure conditions tested within the test suite.
 
 ### Update 2: Search Fallback & Price Modifier Bug ($45 vs. $6)
 - **Problem:** Sent prompts such as `"Find trail running shoes under $45 from approved store"`, the agent returned `coffee_paper_filters` for `$6.00`.
@@ -185,7 +185,7 @@ allowance/
 | **PayPilot Policy Engine** | ✅ Complete | Rules R0–R6, Checkpoints P1–P4, Invariant 3 self-exclusion |
 | **Formal Double-Entry Ledger** | ✅ Complete | Balanced journal lines, $\sum \text{Debits} = \sum \text{Credits}$, SQLite triggers |
 | **Hardened PayPal Orders v2** | ✅ Complete | `MAY_HAVE_BEEN_SENT`, atomic CAS leases, nested capture ID parsing |
-| **REST API v1 (`/v1/*`)** | ✅ Complete | Signed quotes, idempotent purchase proposals, Bearer `ak_live_...` auth |
+| **REST API v1 (`/v1/*`)** | ✅ Complete | Signed quotes, idempotent purchase proposals, Bearer `ak_test_...` auth |
 | **MCP Server** | ✅ Complete | Standalone JSON-RPC 2.0 with 5 safe tools, zero capture primitives |
 | **Personal Edition MVP** | ✅ Complete | $100 daily limit, $30 auto-threshold, merchant payee routing |
 | **Automated Test Suite** | ✅ Complete | **137 / 137 passing tests in 8.09s** |
@@ -201,15 +201,28 @@ allowance/
 ### Option A: Windows 1-Click Launch (Recommended)
 Double-click **`run.bat`** in the repository root. It automatically opens `http://localhost:8000`.
 
-### Option B: Python Command
-```powershell
+### Option B: Cross-Platform Command
+```bash
+# Windows (PowerShell):
 python scripts/dev_server.py
+
+# macOS / Linux (Bash):
+python3 scripts/dev_server.py
 ```
 Open **`http://localhost:8000`** in your browser.
 
+> [!NOTE]
+> **Understanding Active Spending Profiles:**  
+> - **Demo Organization Profile (Default Agent):** Configured as $300 daily budget, $50 auto-approval threshold, $150 per-tx ceiling. Evaluated by default on `http://localhost:8000` (allowing $45 shoes to auto-approve under $50, and $90 flats to escalate to human review).
+> - **Personal Edition Profile (`agent_personal`):** Configured as $100 daily budget, $30 auto-approval threshold, $50 per-tx ceiling. Tested in `test_personal_edition_mvp.py` (where $18 socks auto-approve, $45 shoes escalate, and $90 flats are rejected outright).
+
 ### Option C: Run the Automated Test Suite
-```powershell
+```bash
+# Windows (PowerShell):
 $env:PYTHONPATH="." ; python -m unittest discover -s backend/tests -t . -p "test_*.py"
+
+# macOS / Linux (Bash):
+PYTHONPATH="." python3 -m unittest discover -s backend/tests -t . -p "test_*.py"
 ```
 
 ### Option D: Run Postman Collection

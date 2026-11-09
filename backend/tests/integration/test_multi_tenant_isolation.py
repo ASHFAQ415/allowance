@@ -92,7 +92,7 @@ class TestMultiTenantIsolation(unittest.TestCase):
         self.assertNotIn('admin', self.ctx_b.scopes)
 
         # Invalid key fails
-        bad_ctx = authenticate_api_key(self.conn, 'ak_live_invalid_fake_key_12345')
+        bad_ctx = authenticate_api_key(self.conn, 'ak_test_invalid_fake_key_12345')
         self.assertIsNone(bad_ctx)
 
     def test_credential_revocation_locks_out_immediately(self):

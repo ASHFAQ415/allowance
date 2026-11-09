@@ -1,3 +1,5 @@
+# Render Blueprint for Allowance v5.0
+# 100% Free-Tier Compatible (no paid persistent disks required)
 services:
   - type: web
     name: allowance-platform
@@ -5,19 +7,14 @@ services:
     plan: free
     region: oregon
     healthCheckPath: /health
-    disk:
-      name: allowance-data
-      mountPath: /data
-      sizeGB: 1
     envVars:
       - key: PORT
         value: 8000
       - key: DB_PATH
-        value: /data/allowance.db
+        value: "/tmp/allowance.db"
       - key: PAYPAL_MODE
         value: mock
       - key: ALLOW_DEMO_RESET
         value: "true"
       - key: PYTHONPATH
         value: "."
-
