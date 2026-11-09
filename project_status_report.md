@@ -168,12 +168,12 @@ allowance/
 - Created `run.bat` for instant local execution (checks Python, verifies frontend build, opens browser to `http://localhost:8000`, starts server).
 - Created `create_desktop_shortcut.bat` generating an `Allowance.lnk` Desktop shortcut.
 
-### Update 10: Hackathon Submission Package & Sponsor Prize Integrations
-- **Postman Collection (`postman/allowance_v5_collection.json` & `postman/allowance_environment.json`):** Full Collection v2.1 with automated JavaScript assertion tests for all REST v1 and PayPal Sandbox routes.
-- **Render Cloud Deployment (`render.yaml` & `Dockerfile`):** Multi-stage production container and Infrastructure-as-Code blueprint.
+### Update 10: Hackathon Submission Package & Integrations
+- **Postman API Collection (`postman/allowance_v5_collection.json` & `postman/allowance_environment.json`):** Full Collection v2.1 with automated JavaScript assertion tests for all REST v1 and PayPal Sandbox routes (API collection; no sponsor prize).
+- **Render Cloud Deployment Blueprint (`render.yaml` & `Dockerfile`):** Multi-stage production container and Infrastructure-as-Code blueprint configured for Render's 100% free tier.
 - **Devpost Submission Narrative (`docs/devpost_submission.md`):** Complete submission document including official compliance proof for hackathon updates.
 - **3-Minute Master Cut Video Script (`docs/video_demo_script.md`):** Rehearsed second-by-second presenter script strictly under 3 minutes.
-- **Full Test Suite:** Expanded to **137 / 137 automated tests passing in 8.09s**.
+- **Full Test Suite:** **137 / 137 automated tests passing in 13.01s**.
 
 ---
 
@@ -188,11 +188,11 @@ allowance/
 | **REST API v1 (`/v1/*`)** | ✅ Complete | Signed quotes, idempotent purchase proposals, Bearer `ak_test_...` auth |
 | **MCP Server** | ✅ Complete | Standalone JSON-RPC 2.0 with 5 safe tools, zero capture primitives |
 | **Personal Edition MVP** | ✅ Complete | $100 daily limit, $30 auto-threshold, merchant payee routing |
-| **Automated Test Suite** | ✅ Complete | **137 / 137 passing tests in 8.09s** |
+| **Automated Test Suite** | ✅ Complete | **137 / 137 passing tests in 13.01s** |
 | **Unified UI Dashboard** | ✅ Complete | React 18 + Tailwind, two-step approvals, Kill Switch banner |
 | **1-Click Local Execution** | ✅ Complete | `run.bat` & Windows Desktop shortcut `create_desktop_shortcut.bat` |
-| **Postman API Collection** | ✅ Complete | Collection v2.1 with automated test assertions (`postman/`) |
-| **Render Cloud Deployment** | ✅ Complete | `render.yaml` blueprint + multi-stage `Dockerfile` |
+| **Postman API Collection** | ✅ Complete | Collection v2.1 with automated test assertions (`postman/`) (no sponsor prize) |
+| **Render Cloud Deployment** | ⚠️ Blueprint Included | `render.yaml` blueprint + multi-stage `Dockerfile` (free-tier compatible) |
 
 ---
 
@@ -246,13 +246,19 @@ Every contributor, reviewer, and AI assistant working on this codebase **must st
 
 ## 7. Submission Checklist for Hackathon Submissions
 
-- [x] **Codebase Freeze:** v5.0 feature freeze complete.
-- [x] **Automated Tests:** 137 / 137 tests passing.
-- [x] **PayPal Sandbox Capture Verification:** Documented in `docs/sandbox-verification.md`.
-- [x] **Postman Sponsor Prize Collection:** `postman/allowance_v5_collection.json`.
-- [x] **Render Sponsor Prize Blueprint:** `render.yaml` and `Dockerfile`.
-- [x] **Devpost Submission Copy:** `docs/devpost_submission.md`.
-- [x] **Video Script Ready:** `docs/video_demo_script.md` (2:50 targeted length).
-- [x] **Local 1-Click Launchers:** `run.bat` and `create_desktop_shortcut.bat`.
-- [ ] **Record 3-Minute Video:** Follow `docs/video_demo_script.md` and upload to YouTube.
-- [ ] **Submit on Devpost:** Copy text from `docs/devpost_submission.md` into the Devpost submission portal before the deadline.
+- [x] **T1: License & Hygiene:** Official MIT License present, `.gitignore` comprehensive, no secrets/db files tracked.
+- [x] **T2: Secret Scan:** Clean git history and working tree, `ak_test_` sanitized, provider response redacted.
+- [x] **T3: Dependency & Runtime Path:** Python stdlib zero-dependency server verified, `frontend/dist` committed.
+- [x] **T4: Environment Configuration:** `.env.example` created, dynamic base URL and payee overrides implemented.
+- [x] **T5: Policy Profile Consistency:** Default Demo profile ($300/$150/$50/$100) aligned across UI and engine.
+- [x] **T6: Repeatable Demo Reset:** `python scripts/seed_db.py --reset` CLI flag implemented and verified.
+- [x] **T7: Frontend v5.0 Build:** Header and `package.json` updated to `v5.0.0`; clean production bundle built and committed.
+- [x] **T8: Free-Tier Render Blueprint:** `render.yaml` updated for 100% free-tier compatibility (transient SQLite).
+- [x] **T9: Sponsor Tools Alignment:** Postman documented as API collection; Render documented as blueprint included.
+- [x] **T10: README Overhaul:** 60-second judge quickstart, modes table, cross-platform commands, changelog added.
+- [x] **T11: Devpost Narrative & Instructions:** Complete problem narrative, official prize categories, testing block ready.
+- [x] **T12: Test Suite Verification:** **137 / 137 automated tests passing in 13.01s**.
+- [ ] **Human Task 1:** Record 3-minute video (under 3:00, no music, public YouTube) following `docs/video_demo_script.md`.
+- [ ] **Human Task 2:** Take 4–5 clean dashboard screenshots and upload thumbnail.
+- [ ] **Human Task 3:** Make GitHub repository public and confirm MIT License is visible in the About section.
+- [ ] **Human Task 4:** Submit Devpost entry before the official deadline (Nov 12, 2026, 12:00 PM Pacific / Nov 13, 1:30 AM IST).

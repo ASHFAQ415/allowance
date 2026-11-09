@@ -9,10 +9,15 @@
 
 - **Project Title:** ALLOWANCE: Give your AI Agent an Allowance, Not Your Wallet
 - **Tagline:** Autonomous AI spending control, policy engine, and double-entry financial authorization platform built on PayPal Orders v2.
-- **Track:** PayPal Developer Platform + AI Integration
-- **Targeted Sponsor Prizes:**
-  - **Postman:** Comprehensive API Collection with automated tests for REST v1 and PayPal Sandbox flows.
-  - **Render:** One-click containerized deployment via `render.yaml` Infrastructure-as-Code blueprint.
+- **Track & Main Categories Targeted:**
+  - **Best Use of Agentic Commerce**
+  - **Best Use of PayPal + AI**
+  - **Most Impactful**
+  - **Best Demo Delivery**
+- **Sponsor Prize Targeted:**
+  - **Render:** One-click containerized deployment via free-tier compatible `render.yaml` Infrastructure-as-Code blueprint.
+- **Additional Tool Integrations:**
+  - **Postman:** Comprehensive API Collection v2.1 with automated JavaScript assertions for all REST v1 and PayPal Sandbox routes *(tool integration; no official sponsor prize)*.
 
 ---
 
@@ -48,12 +53,12 @@ We asked: *What if AI agents didn't hold wallets at all? What if we gave them an
 
 ### How We Built It
 - **Backend & Policy Engine:** Python 3.11 with SQLite WAL mode and serialized `BEGIN IMMEDIATE` transactions, providing atomic admission and zero phantom reservations.
-- **Payment Rails:** PayPal Orders v2 (supporting Mock, Live Sandbox, and Production modes).
+- **Payment Rails:** PayPal Orders v2 (supporting Mock and Live Sandbox environments).
 - **Accounting Architecture:** Formal double-entry general ledger with database-level immutability triggers (`abort_journal_entries_update`, `abort_journal_entries_delete`).
 - **AI Integration (MCP & REST):** 
   - Model Context Protocol (MCP) JSON-RPC 2.0 server (`backend/app/mcp/server.py`) exposing 5 bounded tools (`search_products`, `get_product_quote`, `get_allowance`, `request_purchase`, `get_purchase_status`), while strictly withholding capture primitives.
   - Enterprise REST API v1 (`/v1/*`) secured with SHA-256 hashed API keys (`ak_test_...`).
-- **Frontend Dashboard:** React 18, Vite, Lucide Icons, and Tailwind CSS.
+- **Frontend Dashboard:** React 18, Vite, Lucide Icons, and Tailwind CSS (pre-built production bundle committed to repository).
 - **Infrastructure & Automation:** One-click Windows launcher (`run.bat`), Desktop shortcut generator, Render deployment blueprint (`render.yaml`), and multi-stage Docker container.
 
 ---
@@ -71,45 +76,84 @@ We built Allowance around 7 mandatory architectural constraints:
 ---
 
 ### Compliance: What Was Built & Significantly Updated During Hackathon Period
-In accordance with official hackathon rules for project updates, the following major components were architected, implemented, and verified during the hackathon submission period:
+In accordance with official hackathon rules for project updates, the entire Allowance platform was architected, implemented, and verified during the hackathon submission period (initiated November 6, 2026):
 - **Formal Double-Entry Bookkeeping Engine (`backend/app/db/double_entry.py`):** Built from scratch with Chart of Accounts, balancing constraint validation ($\sum \text{debits} = \sum \text{credits}$), and rebuildable projections.
 - **Model Context Protocol (MCP) Server (`backend/app/mcp/server.py`):** Designed and built a standalone JSON-RPC 2.0 MCP server with 5 safe tools.
 - **Enterprise REST API v1 (`backend/app/api/v1/`):** Implemented `/v1/quotes`, `/v1/purchase-requests`, `/v1/allowance`, `/v1/freeze`, and `/v1/unfreeze`.
 - **Cryptographic Credential Subsystem (`backend/app/auth/`):** SHA-256 hashed API keys (`ak_test_...`), constant-time validation (`hmac.compare_digest`), and scoped permissions.
 - **PayPal Orders v2 Nested Capture Extraction:** Upgraded response parsing in `capture_lifecycle.py` and `client.py` to parse nested captures (`purchase_units[0].payments.captures[0].id`).
 - **Personal Edition MVP Profile:** Individual $100 daily allowance, $30 auto-threshold, and payee routing.
-- **Test Suite Expansion:** Expanded automated test coverage from 114 to **137 passing tests**.
-- **Windows Zero-Configuration Launcher:** Created `run.bat` and `create_desktop_shortcut.bat`.
+- **Test Suite Expansion:** Expanded automated test coverage from initial draft to **137 passing tests**.
+- **Windows Zero-Configuration Launcher & Reset:** Created `run.bat`, `create_desktop_shortcut.bat`, and `seed_db.py --reset`.
 
 ---
 
 ### Sponsor Prizes Targeted & Justification
 
-#### 1. Postman Sponsor Prize
-- **Artifacts:** `postman/allowance_v5_collection.json` and `postman/allowance_environment.json`.
-- **Capabilities:** Comprehensive collection covering System Health, Quotes, Allowance checks, Idempotent Purchase Submissions, Human Approvals, Emergency Kill Switch, and PayPal Sandbox captures.
-- **Automated Assertions:** Includes embedded JavaScript test scripts asserting HTTP status codes, schema validation, cart hashes, and nested capture IDs.
-
-#### 2. Render Sponsor Prize
+#### Render Sponsor Prize
 - **Artifacts:** `render.yaml` (Render Blueprint) and multi-stage `Dockerfile`.
-- **Capabilities:** Production-ready container building the React frontend and Python runtime, with zero-configuration one-click deployment via free-tier compatible `render.yaml` blueprint.
+- **Capabilities:** Production-ready container building the React frontend and Python runtime, with zero-configuration one-click deployment via free-tier compatible `render.yaml` blueprint (using transient SQLite storage; no paid persistent disks required).
+
+*(Note: Postman Collection v2.1 with embedded automated test assertions is also included in `postman/` as an API developer tool).*
 
 ---
 
-### Accomplishments We're Proud Of
-- **137 / 137 Automated Tests Passing in 8.09s:** Rock-solid verification covering race conditions, lease expiration, double captures, and trigger immutability.
-- **Zero-Corruption Reversals:** Demonstrating that prompt injection cannot force an unauthorized purchase or alter server-side catalog pricing.
-- **Genuine PayPal Sandbox Evidence:** Recorded live in `docs/sandbox-verification.md` with verified nested capture IDs.
+## 3. Testing Instructions (for Devpost "Testing instructions" field)
+
+```text
+================================================================================
+ALLOWANCE (v5.0) — JUDGE TESTING INSTRUCTIONS (60 SECONDS)
+================================================================================
+
+1. ZERO-CONFIGURATION QUICK START:
+   Allowance runs completely out-of-the-box with NO API keys or external setups.
+   Node.js is NOT required (the pre-built frontend bundle is included).
+
+   - On Windows: Double-click "run.bat" (or run "$env:PYTHONPATH='.' ; python scripts/dev_server.py")
+   - On macOS/Linux: Run "PYTHONPATH=. python3 scripts/dev_server.py"
+   - Open browser: http://localhost:8000
+
+2. EVALUATION OF THE 4 CORE DEMO SCENARIOS:
+   The UI evaluates against the Demo Organization Profile ($300 budget, $50 auto-threshold).
+   Click the preset chips on the dashboard:
+
+   Scenario 1: [Trail Shoes ($45)] -> Click "Execute Autonomous Order"
+   -> Outcome: AUTO_APPROVED and settled on PayPal Orders v2 ($45.00) under Rule R6.
+
+   Scenario 2: [Road Flats ($90)] -> Click "Execute Autonomous Order"
+   -> Outcome: Held in Human Review Queue under Rule R4 (exceeds $50 auto-threshold).
+   -> Click "Authorize & Complete": Supervisor approves (P2) + PayPal buyer consent confirmed -> $90.00 settles.
+
+   Scenario 3: [DarkWeb Store] -> Click "Execute Autonomous Order"
+   -> Outcome: Immediate BLOCKED under Rule R1 (Merchant not allowlisted). Zero funds moved.
+
+   Scenario 4: [Emergency Kill Switch]
+   -> Click "Toggle Kill Switch" in header -> Try ordering shoes.
+   -> Outcome: Immediate BLOCKED under Rule R0 (Emergency spending freeze ACTIVE).
+   -> Click "Deactivate Kill Switch" to resume normal operations.
+
+3. REPEATABLE CLEAN RESET:
+   To return the database, budget, and ledger to a pristine 0-state at any time:
+   python scripts/seed_db.py --reset  (or python3 scripts/seed_db.py --reset)
+
+4. ADMIN KEY:
+   The admin key is pre-filled on the dashboard header:
+   dev-secret-admin-token-min-32-chars-long-abc-123
+   (Passed via 'X-Admin-Token' for freeze/unfreeze and approvals).
+
+5. AUTOMATED TEST SUITE:
+   Run all 137 tests covering isolation, double-entry balancing, and adversarial conditions:
+   python -m unittest discover -s backend/tests -t . -p "test_*.py"
+
+6. (OPTIONAL) LIVE PAYPAL SANDBOX:
+   To test with your own PayPal developer sandbox app:
+   Copy .env.example to .env, set PAYPAL_MODE=sandbox, set PAYPAL_CLIENT_ID and
+   PAYPAL_CLIENT_SECRET, and run: python scripts/paypal_smoke.py
+   (Verified evidence is available in docs/sandbox-verification.md).
+================================================================================
+```
 
 ---
 
-### What's Next for Allowance
-- **PostgreSQL Migration:** Transition from SQLite WAL to PostgreSQL 16 with row-level locks (`SELECT ... FOR UPDATE`) for large enterprise multi-tenancy.
-- **PayPal Vault Integration:** Integrating PayPal Vaulting / Billing Agreements for compliant, pre-authorized zero-click autonomous recurring payments.
-- **Hierarchical Department Budgets:** Multi-level budget trees (Organization → Department → Team → Agent).
-
----
-
-## 3. Built With
+## 4. Built With
 `Python`, `PayPal Orders v2`, `FastAPI`, `SQLite WAL`, `React 18`, `Tailwind CSS`, `Model Context Protocol (MCP)`, `Postman`, `Render`, `Docker`.
-
