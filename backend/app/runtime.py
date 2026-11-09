@@ -8,6 +8,8 @@ client used by the specific workflow that asks for it.
 """
 
 import json
+import logging
+import os
 import time
 from typing import Optional
 
@@ -20,6 +22,7 @@ from .orchestrator.queue import WorkerPoolManager
 
 _worker_pool: Optional[WorkerPoolManager] = None
 _db_path: str = DEFAULT_DB_PATH
+logger = logging.getLogger("allowance.runtime")
 
 
 def _now_iso() -> str:
@@ -76,6 +79,9 @@ def process_agent_run(run_id: str, worker_id: str) -> None:
 
         with transactional_session(conn):
             _record_event(conn, tenant_id, "RUN_STARTED", run_id, {"worker_id": worker_id})
+
+        ai_mode = "Claude 3.5 Sonnet (ANTHROPIC_API_KEY)" if os.environ.get("ANTHROPIC_API_KEY") else "Deterministic Fallback (no key)"
+        logger.info("ShopMind: Executing run %s with [%s] for prompt: '%s'", run_id, ai_mode, prompt)
 
         try:
             status, reason, cart, trace = execute_agent_loop(prompt)

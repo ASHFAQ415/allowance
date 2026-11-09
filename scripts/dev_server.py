@@ -7,6 +7,7 @@ Serves:
 """
 
 import json
+import logging
 import os
 import sys
 import threading
@@ -15,6 +16,9 @@ import uuid
 import urllib.parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("allowance.dev_server")
 
 # Add repo root to path
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -356,6 +360,8 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
 
             # Process run synchronously so UI gets immediate authoritative outcome
             try:
+                ai_mode = "Claude 3.5 Sonnet (ANTHROPIC_API_KEY)" if os.environ.get("ANTHROPIC_API_KEY") else "Deterministic Fallback (no key)"
+                logger.info("ShopMind: Executing with [%s] for prompt: '%s'", ai_mode, prompt)
                 status, reason, cart, trace = execute_agent_loop(prompt)
                 if status == "COMPLETED" and cart:
                     pid, pstate, decision = submit_cart_to_orchestrator(conn, "tenant_demo", agent_id, run_id, cart, time.time())

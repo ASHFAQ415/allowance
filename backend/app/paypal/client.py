@@ -383,6 +383,7 @@ class PayPalHttpClient(PayPalClientInterface):
                 error_class="AUTH_ERROR", raw_error=str(e)
             )
 
+        public_base_url = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
         url = f"{self.base_url}/v2/checkout/orders"
         amount_str = f"{total_cents / 100.0:.2f}"
         payload = {
@@ -398,8 +399,8 @@ class PayPalHttpClient(PayPalClientInterface):
                     "experience_context": {
                         "user_action": "PAY_NOW",
                         "shipping_preference": "NO_SHIPPING",
-                        "return_url": "https://example.com/checkout/return",
-                        "cancel_url": "https://example.com/checkout/cancel"
+                        "return_url": f"{public_base_url}/checkout/return",
+                        "cancel_url": f"{public_base_url}/checkout/cancel"
                     }
                 }
             }

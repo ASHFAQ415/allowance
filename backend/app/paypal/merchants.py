@@ -6,6 +6,7 @@ onboarded merchants with pre-configured PayPal Payee accounts.
 AI agents and buyers cannot debit arbitrary unverified recipients.
 """
 
+import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -63,12 +64,25 @@ def get_payee_for_merchant(merchant_id: str) -> Dict[str, str]:
     """
     Returns PayPal Orders v2 payee object for order creation.
     Raises ValueError if merchant is not supported.
+    Supports environment variable overrides for custom sandbox merchant accounts:
+    - PAYPAL_{MERCHANT_ID}_PAYEE (e.g. PAYPAL_MERCHANT_SHOES_PAYEE)
+    - PAYPAL_SANDBOX_PAYEE (global override for sandbox business account)
     """
     m = get_merchant(merchant_id)
     if not m:
         raise ValueError(f"Merchant '{merchant_id}' is not an onboarded merchant. Arbitrary payment routing denied.")
-    return {
-        "email_address": m.payee_email,
-        "merchant_id": m.sandbox_merchant_id
-    }
+
+    payee_email = (
+        os.environ.get(f"PAYPAL_{merchant_id.upper()}_PAYEE")
+        or os.environ.get("PAYPAL_SANDBOX_PAYEE")
+        or m.payee_email
+    )
+
+    payee = {"email_address": payee_email}
+    custom_mid = os.environ.get(f"PAYPAL_{merchant_id.upper()}_MERCHANT_ID")
+    if custom_mid:
+        payee["merchant_id"] = custom_mid
+    elif not os.environ.get(f"PAYPAL_{merchant_id.upper()}_PAYEE") and not os.environ.get("PAYPAL_SANDBOX_PAYEE"):
+        payee["merchant_id"] = m.sandbox_merchant_id
+    return payee
 
