@@ -151,7 +151,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-              ALLOWANCE <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">v4.2.2</span>
+              ALLOWANCE <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">v5.0</span>
             </h1>
             <p className="text-xs text-slate-400">Give your AI agent an allowance, not your wallet.</p>
           </div>

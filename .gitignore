@@ -53,6 +53,8 @@ ehthumbs.db
 node_modules/
 frontend/node_modules/
 frontend/.env.local
+!frontend/dist/
+!frontend/dist/**
 
 # Testing & Coverage
 .pytest_cache/
