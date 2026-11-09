@@ -4,9 +4,10 @@
 > *Autonomous AI Spending Control, Policy Engine & Double-Entry Financial Authorization Platform.*  
 > Built for the **PayPal AI Hackathon 2026**.
 
-[![Tests Passing](https://img.shields.io/badge/Tests-137%20passing-brightgreen.svg)](#4-automated-testing-137--137-passing)
+[![Tests Passing](https://img.shields.io/badge/Tests-137%20passing-brightgreen.svg)](#6-automated-testing-137--137-passing)
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![PayPal Sandbox](https://img.shields.io/badge/PayPal-Orders%20v2%20Sandbox-003087.svg)](docs/sandbox-verification.md)
+[![Submission Readiness](https://img.shields.io/badge/Submission-Readiness%20Verified-blue.svg)](docs/submission_readiness_report.md)
 [![Postman Collection](https://img.shields.io/badge/Postman-Collection%20v2.1-FF6C37.svg)](postman/allowance_v5_collection.json)
 [![Render Blueprint](https://img.shields.io/badge/Render-Blueprint%20Included-46E3B7.svg)](render.yaml)
 [![MCP Compatible](https://img.shields.io/badge/MCP-JSON--RPC%202.0%20Compatible-orange.svg)](#option-b-model-context-protocol-mcp-server)
@@ -258,7 +259,81 @@ Allowance implements formal commitment accounting with balanced debits and credi
 
 ---
 
-## 10. Third-Party Dependencies & Licenses
+## 10. Repository Structure
+
+```
+allowance/
+├── .agents/
+│   └── rules/
+│       └── financial_safety_invariants.md  <-- Core architectural invariants (MANDATORY)
+├── backend/
+│   ├── app/
+│   │   ├── agent/
+│   │   │   ├── catalog.py                  <-- Authoritative product database & token scoring
+│   │   │   ├── loop.py                     <-- Claude agent loop with deterministic fallback
+│   │   │   └── tools.py                    <-- Sandboxed discovery tools (zero price-injection)
+│   │   ├── api/
+│   │   │   ├── v1/
+│   │   │   │   └── routes.py               <-- REST API v1 endpoints with Bearer auth
+│   │   │   ├── auth.py                     <-- Constant-time token verification & rate limits
+│   │   │   ├── dto.py                      <-- Strict Pydantic input/output schemas
+│   │   │   └── routes.py                   <-- Dashboard REST API & Kill Switch endpoints
+│   │   ├── auth/
+│   │   │   └── credentials.py              <-- SHA-256 API key management & permission scopes
+│   │   ├── db/
+│   │   │   ├── bootstrap.py                <-- Idempotent schema bootstrapper & profile seed
+│   │   │   ├── connection.py               <-- SQLite WAL mode & transaction sessions
+│   │   │   ├── double_entry.py             <-- Formal double-entry bookkeeping engine
+│   │   │   ├── financial_journal.py        <-- Event-sourced financial facts & budget projection
+│   │   │   ├── purchases.py                <-- Purchase lifecycle queries & state persistence
+│   │   │   ├── quotes.py                   <-- Server-side quote generation & cart hashing
+│   │   │   └── schema.sql                  <-- SQLite DDL: tables, indexes, immutability triggers
+│   │   ├── mcp/
+│   │   │   └── server.py                   <-- Model Context Protocol (MCP) JSON-RPC 2.0 server
+│   │   ├── orchestrator/
+│   │   │   ├── admission.py                <-- Concurrency limits & queue rate fencing
+│   │   │   ├── capture_lifecycle.py        <-- Safe capture flow & nested capture ID parsing
+│   │   │   ├── core.py                     <-- Checkpoints P1-P4 orchestration pipeline
+│   │   │   ├── queue.py                    <-- Bounded worker pool & queue dispatch
+│   │   │   ├── rechecks.py                 <-- Pure policy re-evaluation with self-exclusion
+│   │   │   └── state_machine.py            <-- PurchaseState transitions & lease acquisition
+│   │   ├── paypal/
+│   │   │   ├── client.py                   <-- PayPal client factory (Mock / Sandbox / Live)
+│   │   │   ├── exclusive_claim.py          <-- Atomic CAS lease claiming & fence protection
+│   │   │   └── merchants.py                <-- Supported merchant directory & payee routing
+│   │   └── runtime.py                      <-- Worker pool manager & lifespan lifecycle
+│   └── tests/
+│       ├── unit/                           <-- Isolation, double-entry, policy & agent tests
+│       └── integration/                    <-- Concurrency, multi-tenant & sandbox tests
+├── docs/
+│   ├── devpost_submission.md               <-- Official Devpost submission text & compliance proof
+│   ├── sandbox-verification.md             <-- Sanitized Gate 1 PayPal capture evidence
+│   ├── submission_readiness_report.md      <-- Tasks T1–T15 submission audit & verification proof
+│   └── video_demo_script.md                <-- Rehearsed 3-minute master cut video demonstration script
+├── frontend/
+│   ├── src/                                <-- React 18 + Tailwind CSS unified dashboard
+│   ├── dist/                               <-- Pre-compiled production bundle (zero Node needed)
+│   └── package.json                        <-- Frontend dependencies & scripts (v5.0.0)
+├── postman/
+│   ├── allowance_v5_collection.json        <-- Full Postman Collection v2.1 with automated tests
+│   └── allowance_environment.json          <-- Environment variables for local & cloud runs
+├── scripts/
+│   ├── dev_server.py                       <-- Zero-dependency full-stack server (Python stdlib)
+│   ├── paypal_smoke.py                     <-- PayPal connectivity smoke & evidence collector
+│   └── seed_db.py                          <-- Database seeder with sample policies & --reset flag
+├── .env.example                            <-- Environment configuration template
+├── create_desktop_shortcut.bat             <-- Windows Desktop shortcut generator
+├── Dockerfile                              <-- Production multi-stage Docker build
+├── LICENSE                                 <-- Official MIT Open Source License
+├── render.yaml                             <-- Render Cloud Deployment Blueprint (IaaS)
+├── run.bat                                 <-- One-click Windows launch script
+├── project_status_report.md                <-- Living engineering report & contributor guide
+└── README.md                               <-- THIS FILE
+```
+
+---
+
+## 11. Third-Party Dependencies & Licenses
 
 | Package / Tool | Version | Purpose | License |
 |---|---|---|---|
@@ -277,7 +352,7 @@ Allowance implements formal commitment accounting with balanced debits and credi
 
 ---
 
-## 11. What Changed During the Submission Period (Oct 1 – Nov 12, 2026)
+## 12. What Changed During the Submission Period (Oct 1 – Nov 12, 2026)
 
 The Allowance project was **created entirely during the official PayPal AI Hackathon submission period** (initiated November 6, 2026). Below is the dated development log of major architectural milestones:
 
@@ -292,7 +367,7 @@ The Allowance project was **created entirely during the official PayPal AI Hacka
 
 ---
 
-## 12. Honest Disclosures & Technical Limitations
+## 13. Honest Disclosures & Technical Limitations
 
 - **Simulated & Sandbox Funds Only:** All transactions depicted, recorded, and tested execute exclusively against mock simulation or the PayPal Developer Sandbox environment. Zero real-world money is ever debited or transferred.
 - **In-Flight Transport Recall:** Once HTTP bytes are accepted by PayPal, an emergency freeze cannot recall an in-flight network packet if PayPal settles it before the freeze is processed.
@@ -303,7 +378,7 @@ The Allowance project was **created entirely during the official PayPal AI Hacka
 
 ---
 
-## 13. License & Acknowledgments
+## 14. License & Acknowledgments
 
 This project is open-source under the [MIT License](LICENSE).  
 Built for the **PayPal AI Hackathon 2026** by Mohd Ashfaq and contributors.

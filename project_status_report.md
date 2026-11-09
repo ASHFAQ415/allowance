@@ -89,6 +89,7 @@ allowance/
 ├── docs/
 │   ├── devpost_submission.md               <-- Official Devpost submission text & compliance proof
 │   ├── sandbox-verification.md             <-- Sanitized Gate 1 PayPal capture evidence
+│   ├── submission_readiness_report.md      <-- Tasks T1–T15 submission audit & verification proof
 │   └── video_demo_script.md                <-- Rehearsed 3-minute master cut video demonstration script
 ├── frontend/
 │   ├── src/
@@ -96,19 +97,21 @@ allowance/
 │   │   ├── App.tsx                         <-- Main unified dashboard
 │   │   ├── index.css                       <-- Tailwind styling & custom scrollbars
 │   │   └── main.tsx                        <-- React DOM entry point
-│   ├── dist/                               <-- Pre-compiled production bundle
-│   ├── package.json                        <-- React 18, Lucide React, Tailwind CSS
+│   ├── dist/                               <-- Pre-compiled production bundle (committed; zero Node needed)
+│   ├── package.json                        <-- React 18, Lucide React, Tailwind CSS (v5.0.0)
 │   └── vite.config.ts                      <-- Vite dev & production bundler configuration
 ├── postman/
 │   ├── allowance_v5_collection.json        <-- Full Postman Collection v2.1 with automated tests
 │   └── allowance_environment.json          <-- Environment variables for local & cloud runs
 ├── scripts/
-│   ├── dev_server.py                       <-- Zero-dependency live development server
+│   ├── dev_server.py                       <-- Zero-dependency live development server (Python stdlib)
 │   ├── paypal_smoke.py                     <-- PayPal API connectivity validator & evidence logger
-│   └── seed_db.py                          <-- Database seeder with sample policies & items
+│   └── seed_db.py                          <-- Database seeder with sample policies & --reset flag
+├── .env.example                            <-- Environment template with safe default configuration
 ├── create_desktop_shortcut.bat             <-- Windows Desktop shortcut generator
 ├── Dockerfile                              <-- Production multi-stage Docker build
-├── render.yaml                             <-- Render Cloud Deployment Blueprint (IaaS)
+├── LICENSE                                 <-- Official MIT Open Source License
+├── render.yaml                             <-- Render Cloud Deployment Blueprint (IaaS, 100% free-tier)
 ├── run.bat                                 <-- Windows 1-click launch script
 ├── project_status_report.md                <-- THIS FILE: Living status and contributor guide
 └── README.md                               <-- Master documentation & quick start
@@ -173,7 +176,19 @@ allowance/
 - **Render Cloud Deployment Blueprint (`render.yaml` & `Dockerfile`):** Multi-stage production container and Infrastructure-as-Code blueprint configured for Render's 100% free tier.
 - **Devpost Submission Narrative (`docs/devpost_submission.md`):** Complete submission document including official compliance proof for hackathon updates.
 - **3-Minute Master Cut Video Script (`docs/video_demo_script.md`):** Rehearsed second-by-second presenter script strictly under 3 minutes.
-- **Full Test Suite:** **137 / 137 automated tests passing in 13.01s**.
+- **Full Test Suite:** **137 / 137 automated tests passing in 6.96s**.
+
+### Update 11: Submission Readiness Review & Hackathon Compliance (Tasks T1–T15)
+- **T1 License & Hygiene:** Added standard MIT License (2026 Mohd Ashfaq) and updated `.gitignore` to ensure zero database or environment files are tracked.
+- **T2 Secret Scan Sanitization:** Comprehensive audit of working tree and git history; sanitized all API keys to `ak_test_` prefix; redacted PayPal order IDs in `docs/sandbox-verification.md`.
+- **T3 Zero-Dependency Path & Pre-built Frontend:** Verified Python standard library execution in `dev_server.py`; tracked pre-built production bundle in `frontend/dist/` (zero Node.js requirement for judges).
+- **T4 Dynamic Config & Visibility:** Made `PUBLIC_BASE_URL` configurable; added `PAYPAL_SANDBOX_PAYEE` override; added clear console logs distinguishing Claude vs. Deterministic Fallback mode.
+- **T5 Profile Alignment:** Synchronized documentation, demo table, and video script to the Demo Organization Profile ($300 / $150 / $50 / $100).
+- **T6 Repeatable Demo Reset:** Implemented `python scripts/seed_db.py --reset` for clean 1-step demo resets with schema re-initialization.
+- **T7 Frontend Version Sync:** Synchronized `frontend/package.json` (5.0.0) and UI header to `v5.0`.
+- **T8 & T9 Sponsor Tools Alignment:** Clarified Render blueprint (100% free-tier compatible, transient SQLite) and Postman as an API developer collection (no sponsor prize).
+- **T10 & T11 Documentation Overhaul:** Rewrote `README.md` with 60-second judge quick start; added dedicated testing instructions block to `docs/devpost_submission.md`.
+- **T15 Submission Readiness Report:** Generated `docs/submission_readiness_report.md` with full matrix and verification evidence.
 
 ---
 
@@ -188,7 +203,7 @@ allowance/
 | **REST API v1 (`/v1/*`)** | ✅ Complete | Signed quotes, idempotent purchase proposals, Bearer `ak_test_...` auth |
 | **MCP Server** | ✅ Complete | Standalone JSON-RPC 2.0 with 5 safe tools, zero capture primitives |
 | **Personal Edition MVP** | ✅ Complete | $100 daily limit, $30 auto-threshold, merchant payee routing |
-| **Automated Test Suite** | ✅ Complete | **137 / 137 passing tests in 13.01s** |
+| **Automated Test Suite** | ✅ Complete | **137 / 137 passing tests in 6.96s** |
 | **Unified UI Dashboard** | ✅ Complete | React 18 + Tailwind, two-step approvals, Kill Switch banner |
 | **1-Click Local Execution** | ✅ Complete | `run.bat` & Windows Desktop shortcut `create_desktop_shortcut.bat` |
 | **Postman API Collection** | ✅ Complete | Collection v2.1 with automated test assertions (`postman/`) (no sponsor prize) |
@@ -257,7 +272,7 @@ Every contributor, reviewer, and AI assistant working on this codebase **must st
 - [x] **T9: Sponsor Tools Alignment:** Postman documented as API collection; Render documented as blueprint included.
 - [x] **T10: README Overhaul:** 60-second judge quickstart, modes table, cross-platform commands, changelog added.
 - [x] **T11: Devpost Narrative & Instructions:** Complete problem narrative, official prize categories, testing block ready.
-- [x] **T12: Test Suite Verification:** **137 / 137 automated tests passing in 13.01s**.
+- [x] **T12: Test Suite Verification:** **137 / 137 automated tests passing in 6.96s**.
 - [ ] **Human Task 1:** Record 3-minute video (under 3:00, no music, public YouTube) following `docs/video_demo_script.md`.
 - [ ] **Human Task 2:** Take 4–5 clean dashboard screenshots and upload thumbnail.
 - [ ] **Human Task 3:** Make GitHub repository public and confirm MIT License is visible in the About section.
