@@ -257,6 +257,10 @@ Allowance implements formal commitment accounting with balanced debits and credi
 - **Refund / Reversal:** `DR 1000` / `CR 5100`
 - **Late Capture:** `DR 5100` / `CR 1000`
 
+> [!NOTE]
+> **Global Hackathon Evaluation & Multi-Currency Architecture:**  
+> For the PayPal AI Hackathon, demo catalog items and policy presets are configured in **USD ($)** to provide standard out-of-the-box evaluation with PayPal developer sandbox test stores. However, the underlying double-entry engine strictly enforces **independent balancing per currency** ($\sum \text{Debits} = \sum \text{Credits}$ separately for each currency code). All ledger lines and budget snapshots are indexed by `(agent_id, budget_day, currency)`, establishing direct architectural readiness for client-specific international currencies (EUR, GBP, JPY, INR, CAD) in Allowance v5.1.
+
 ---
 
 ## 10. Repository Structure
@@ -370,6 +374,7 @@ The Allowance project was **created entirely during the official PayPal AI Hacka
 ## 13. Honest Disclosures & Technical Limitations
 
 - **Simulated & Sandbox Funds Only:** All transactions depicted, recorded, and tested execute exclusively against mock simulation or the PayPal Developer Sandbox environment. Zero real-world money is ever debited or transferred.
+- **Hackathon Currency Focus vs. Multi-Currency Engine:** For the global hackathon evaluation, catalog prices and default policy thresholds are denominated in USD ($) for standard compatibility with PayPal developer sandbox tools. However, the double-entry accounting engine already indexes budgets and enforces balance constraints independently per currency (`USD`, `EUR`, `GBP`, `CAD`, `AUD`, `JPY`, `INR`), providing turnkey architectural support for international client deployments in Allowance v5.1.
 - **In-Flight Transport Recall:** Once HTTP bytes are accepted by PayPal, an emergency freeze cannot recall an in-flight network packet if PayPal settles it before the freeze is processed.
 - **Unresolved Capture Encumbrance:** If a capture attempt enters an ambiguous transport state (e.g. read timeout), the budget reservation remains locked and committed until either authoritative reconciliation establishes settlement or the budget day expires.
 - **Adversarial Scenarios vs. Test Count:** The phrase "53 adversarial scenarios" refers to the comprehensive fault-injection and protocol stress-testing matrix evaluated within the **137 automated unit and integration tests**.

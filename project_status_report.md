@@ -227,9 +227,10 @@ python3 scripts/dev_server.py
 Open **`http://localhost:8000`** in your browser.
 
 > [!NOTE]
-> **Understanding Active Spending Profiles:**  
+> **Understanding Active Spending Profiles & Multi-Currency Support:**  
 > - **Demo Organization Profile (Default Agent):** Configured as $300 daily budget, $50 auto-approval threshold, $150 per-tx ceiling. Evaluated by default on `http://localhost:8000` (allowing $45 shoes to auto-approve under $50, and $90 flats to escalate to human review).
 > - **Personal Edition Profile (`agent_personal`):** Configured as $100 daily budget, $30 auto-approval threshold, $50 per-tx ceiling. Tested in `test_personal_edition_mvp.py` (where $18 socks auto-approve, $45 shoes escalate, and $90 flats are rejected outright).
+> - **Global Multi-Currency Isolation:** While the hackathon prototype evaluates in USD ($) for standard compatibility with PayPal developer sandbox tools, the double-entry accounting engine already indexes budgets and enforces balance constraints independently per currency (`USD`, `EUR`, `GBP`, `CAD`, `AUD`, `JPY`, `INR`), providing turnkey architectural support for international client deployments in Allowance v5.1.
 
 ### Option C: Run the Automated Test Suite
 ```bash

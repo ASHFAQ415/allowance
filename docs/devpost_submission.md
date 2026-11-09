@@ -98,6 +98,23 @@ In accordance with official hackathon rules for project updates, the entire Allo
 
 ---
 
+### Global Hackathon Evaluation & Multi-Currency Architecture
+For the **PayPal AI Hackathon 2026**, the demo catalog, policy thresholds, and PayPal sandbox transactions are denominated in **USD ($)** to ensure seamless comparability and standard evaluation against PayPal sandbox accounts.
+
+However, because Allowance is built for global deployment, **multi-currency isolation is already architected directly into the foundation**:
+- **Independent Balancing Per Currency:** The double-entry general ledger enforces $\sum \text{Debits} = \sum \text{Credits}$ separately per ISO-4217 currency code.
+- **Currency-Partitioned Budgets:** `budget_accounting` indexes allowances by `(agent_id, budget_day, currency)`.
+- **Dynamic PayPal Rails:** PayPal Orders v2 payload builders support dynamic currency codes (`USD`, `EUR`, `GBP`, `CAD`, `AUD`, `JPY`, etc.).
+
+### What's Next for Allowance (Client Localization & Enterprise Roadmap)
+- **Client-Specified Home Currencies (v5.1):** Enable international clients to configure their tenant base operating currency (EUR, GBP, INR, JPY) directly in organizational settings.
+- **Cross-Border FX Conversion:** Integrate PayPal multi-currency conversion APIs and exchange-rate oracles when external AI agents buy from international merchants.
+- **PostgreSQL 16 Enterprise Migration:** Transition from SQLite WAL to clustered PostgreSQL with row-level locks (`SELECT ... FOR UPDATE`) for high-concurrency enterprise multi-tenancy.
+- **PayPal Vaulting Integration:** Integrate PayPal Vaulting / Billing Agreements for pre-authorized recurring subscriptions without human intervention.
+- **Hierarchical Department Budgets:** Multi-level tree budgets (Organization → Department → Team → Agent).
+
+---
+
 ## 3. Testing Instructions (for Devpost "Testing instructions" field)
 
 ```text
