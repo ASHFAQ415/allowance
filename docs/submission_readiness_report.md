@@ -105,3 +105,4 @@ The following actions require human access and cannot be performed autonomously:
    - Copy project narrative from [`docs/devpost_submission.md`](devpost_submission.md).
    - Copy testing instructions block into the Devpost **"Testing instructions"** field.
    - Submit before the official deadline: **Thursday, Nov 12, 2026, 12:00 PM Pacific (Nov 13, 1:30 AM IST)**.
+
