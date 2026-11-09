@@ -5,6 +5,7 @@ Initializes the SQLite schema and populates the default tenant, agent, and
 financial policy. Safe to run repeatedly.
 """
 
+import argparse
 import os
 import sys
 
@@ -15,13 +16,48 @@ from backend.app.db.bootstrap import seed_defaults
 from backend.app.db.connection import create_connection, init_db
 
 
-def seed_database(db_path: str = "allowance.db"):
+def seed_database(db_path: str = "allowance.db", reset: bool = False):
+    if reset:
+        print(f"Resetting database at: {db_path}...")
+        removed = True
+        for ext in ["", "-wal", "-shm"]:
+            f = f"{db_path}{ext}"
+            if os.path.exists(f):
+                try:
+                    os.remove(f)
+                    print(f"  Removed: {f}")
+                except OSError as e:
+                    removed = False
+                    print(f"  File {f} held by running process: {e}")
+
+        # If file could not be removed directly (e.g. running dev server on Windows),
+        # wipe all tables in-place so demo returns to clean state
+        if not removed and os.path.exists(db_path):
+            print("  Performing in-place schema drop and re-creation...")
+            clean_conn = create_connection(db_path)
+            try:
+                clean_conn.execute("PRAGMA foreign_keys = OFF;")
+                triggers = [r[0] for r in clean_conn.execute("SELECT name FROM sqlite_master WHERE type='trigger';").fetchall()]
+                for tr in triggers:
+                    clean_conn.execute(f"DROP TRIGGER IF EXISTS {tr};")
+                tables = [r[0] for r in clean_conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';").fetchall()]
+                for t in tables:
+                    clean_conn.execute(f"DROP TABLE IF EXISTS {t};")
+                clean_conn.commit()
+                clean_conn.execute("PRAGMA foreign_keys = ON;")
+            finally:
+                clean_conn.close()
+
     print(f"Initializing database at: {db_path}...")
     init_db(db_path)
 
     conn = create_connection(db_path)
     try:
         seed_defaults(conn)
+        purchases_cnt = conn.execute("SELECT COUNT(*) FROM purchases;").fetchone()[0]
+        ledger_cnt = conn.execute("SELECT COUNT(*) FROM ledger;").fetchone()[0]
+        frozen_cnt = conn.execute("SELECT COUNT(*) FROM policy WHERE frozen = 1;").fetchone()[0]
+        print(f"Database seeded: {purchases_cnt} purchases, {ledger_cnt} ledger entries, kill switch active: {frozen_cnt > 0}")
     finally:
         conn.close()
 
@@ -29,4 +65,9 @@ def seed_database(db_path: str = "allowance.db"):
 
 
 if __name__ == "__main__":
-    seed_database()
+    parser = argparse.ArgumentParser(description="Seed or reset the Allowance SQLite database.")
+    parser.add_argument("--reset", action="store_true", help="Remove existing database files before seeding a clean state.")
+    parser.add_argument("--db-path", default="allowance.db", help="Path to SQLite database file (default: allowance.db)")
+    args = parser.parse_args()
+
+    seed_database(db_path=args.db_path, reset=args.reset)
