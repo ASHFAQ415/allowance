@@ -111,3 +111,4 @@
 - [ ] Browser zoom set to 100% or 110% for crisp readability.
 - [ ] Stopwatch running: aim for 2 minutes 50 seconds.
 - [ ] Export 1080p 60fps MP4 and upload to YouTube as Public or Unlisted.
+

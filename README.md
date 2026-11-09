@@ -259,16 +259,23 @@ allowance/
 │       ├── unit/                           <-- Isolation, double-entry, policy & agent tests
 │       └── integration/                    <-- Concurrency, multi-tenant & sandbox tests
 ├── docs/
-│   └── sandbox-verification.md             <-- Sanitized Gate 1 PayPal capture evidence
+│   ├── devpost_submission.md               <-- Official Devpost submission text & compliance proof
+│   ├── sandbox-verification.md             <-- Sanitized Gate 1 PayPal capture evidence
+│   └── video_demo_script.md                <-- Rehearsed 3-minute master cut video demonstration script
 ├── frontend/
 │   ├── src/                                <-- React 18 + Tailwind CSS unified dashboard
 │   ├── dist/                               <-- Pre-compiled production bundle
 │   └── package.json
+├── postman/
+│   ├── allowance_v5_collection.json        <-- Full Postman Collection v2.1 with automated tests
+│   └── allowance_environment.json          <-- Environment variables for local & cloud runs
 ├── scripts/
 │   ├── dev_server.py                       <-- Zero-dependency full-stack server
 │   ├── paypal_smoke.py                     <-- PayPal connectivity smoke & evidence collector
 │   └── seed_db.py                          <-- Database seeder with sample policies & items
 ├── create_desktop_shortcut.bat             <-- Windows Desktop shortcut generator
+├── Dockerfile                              <-- Production multi-stage Docker build
+├── render.yaml                             <-- Render Cloud Deployment Blueprint (IaaS)
 ├── run.bat                                 <-- One-click Windows launch script
 ├── project_status_report.md                <-- Living engineering report & contributor guide
 └── README.md                               <-- THIS FILE
