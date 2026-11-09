@@ -1,3 +1,4 @@
+
 @echo off
 setlocal enabledelayedexpansion
 
@@ -60,3 +61,4 @@ python scripts/dev_server.py
 echo.
 echo [INFO] Server has terminated.
 pause
+
