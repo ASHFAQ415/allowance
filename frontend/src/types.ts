@@ -39,6 +39,17 @@ export interface Policy {
   frozen: boolean;
 }
 
+export interface BudgetSnapshot {
+  agent_id: string;
+  budget_day: string;
+  currency: string;
+  captured_cents: number;
+  reserved_cents: number;
+  unresolved_cents: number;
+  auto_approved_committed_cents: number;
+  version: number;
+}
+
 export interface SSEEvent {
   id: number;
   type: string;

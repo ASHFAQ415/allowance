@@ -157,6 +157,22 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                 "frozen": pol.frozen
             })
 
+        if path == "/api/budget":
+            conn = get_thread_connection()
+            from datetime import datetime, timezone
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            snap = get_budget_snapshot(conn, "default", today)
+            return self._send_json(200, {
+                "agent_id": snap.agent_id,
+                "budget_day": snap.budget_day,
+                "currency": snap.currency,
+                "captured_cents": snap.captured_cents,
+                "reserved_cents": snap.reserved_cents,
+                "unresolved_cents": snap.unresolved_cents,
+                "auto_approved_committed_cents": snap.auto_approved_committed_cents,
+                "version": snap.version
+            })
+
         if path == "/api/purchases":
             conn = get_thread_connection()
             cur = conn.execute("SELECT * FROM purchases ORDER BY created_at DESC LIMIT 50;")
