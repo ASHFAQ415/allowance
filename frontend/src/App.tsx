@@ -258,7 +258,7 @@ export default function App() {
                   <span>Review queue</span>
                 </div>
                 {pendingPurchases.length > 0 && (
-                  <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 font-mono text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                  <span className="bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono text-[11px] px-2 py-0.5 rounded-md font-semibold tabular-nums">
                     {pendingPurchases.length}
                   </span>
                 )}
@@ -320,7 +320,7 @@ export default function App() {
           {/* PayPilot Status Card */}
           <div className="bg-[#0f1624] border border-[#1a2336] rounded-xl p-3 text-xs">
             <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
               <span className="font-semibold text-slate-200">PayPilot</span>
             </div>
             <p className="text-[11px] text-slate-400 leading-snug">
@@ -386,7 +386,7 @@ export default function App() {
 
           <div className="flex items-center gap-4 text-xs">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-1 rounded-full font-medium text-[11px]">
+              <span className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md font-medium text-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                 Mock mode
               </span>
@@ -404,7 +404,7 @@ export default function App() {
 
         {/* Toast Notification Banner (when active) */}
         {notification && (
-          <div className={`mx-8 mt-4 p-3.5 rounded-xl border flex items-center justify-between shadow-sm text-xs transition-all ${
+          <div className={`mx-8 mt-4 p-3.5 rounded-xl border flex items-center justify-between shadow-xs text-xs transition-colors duration-150 ease-out ${
             notification.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' :
             notification.type === 'error' ? 'bg-red-50 border-red-200 text-red-900' :
             notification.type === 'warn' ? 'bg-amber-50 border-amber-200 text-amber-900' :
@@ -435,7 +435,7 @@ export default function App() {
               <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 block font-semibold mb-1">
                 DEMO SNAPSHOT • {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()} • {new Date().toISOString().slice(11, 16)} UTC
               </span>
-              <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
                 Organization overview
               </h2>
               <p className="text-xs text-slate-500 mt-1">
@@ -444,7 +444,7 @@ export default function App() {
             </div>
 
             {/* Emergency Freeze Card */}
-            <div className={`p-4 rounded-xl border flex items-center justify-between gap-6 shadow-sm transition-all ${
+            <div className={`p-4 rounded-xl border flex items-center justify-between gap-6 shadow-xs transition-colors duration-150 ease-out ${
               policy?.frozen ? 'bg-red-50/80 border-red-300' : 'bg-white border-slate-200'
             }`}>
               <div>
@@ -463,10 +463,10 @@ export default function App() {
 
               <button
                 onClick={toggleFreeze}
-                className={`px-4 py-2 rounded-lg font-semibold text-xs flex items-center gap-2 transition shadow-sm whitespace-nowrap ${
+                className={`px-4 py-2 rounded-lg font-semibold text-xs flex items-center gap-2 transition-all shadow-xs whitespace-nowrap active:scale-[0.99] ${
                   policy?.frozen
-                    ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse'
-                    : 'bg-[#0f172a] hover:bg-[#1e293b] text-white'
+                    ? 'bg-red-600 hover:bg-red-700 text-white ring-2 ring-red-500/30'
+                    : 'bg-slate-900 hover:bg-slate-800 text-white'
                 }`}
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
@@ -495,7 +495,7 @@ export default function App() {
                   <div>
                     <span className="text-xs font-medium text-emerald-600 block mb-0.5">Available to spend</span>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight">
+                      <span className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight tabular-nums font-mono">
                         ${(availableCents / 100).toFixed(2)}
                       </span>
                       <span className="text-sm font-semibold text-slate-400">USD</span>
@@ -504,27 +504,27 @@ export default function App() {
 
                   <div className="text-right">
                     <span className="text-xs text-slate-500 block">of daily budget</span>
-                    <span className="text-lg font-bold text-slate-900">
+                    <span className="text-lg font-bold text-slate-900 tabular-nums font-mono">
                       ${(dailyBudgetCents / 100).toFixed(2)}
                     </span>
                   </div>
                 </div>
 
                 {/* Tri-Color Segmented Progress Bar */}
-                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden flex mb-3">
+                <div className="w-full bg-slate-100 rounded h-2 overflow-hidden flex mb-3">
                   <div 
                     style={{ width: `${capturedWidth}%` }} 
-                    className="bg-emerald-500 h-full transition-all duration-500"
+                    className="bg-emerald-500 h-full transition-[width] duration-300 ease-out"
                     title={`Captured: $${(capturedCents / 100).toFixed(2)}`}
                   />
                   <div 
                     style={{ width: `${reservedWidth}%` }} 
-                    className="bg-amber-400 h-full transition-all duration-500"
+                    className="bg-amber-400 h-full transition-[width] duration-300 ease-out"
                     title={`Active reservations: $${(reservedCents / 100).toFixed(2)}`}
                   />
                   <div 
                     style={{ width: `${unresolvedWidth}%` }} 
-                    className="bg-slate-400 h-full transition-all duration-500"
+                    className="bg-slate-400 h-full transition-[width] duration-300 ease-out"
                     title={`Unresolved captures: $${(unresolvedCents / 100).toFixed(2)}`}
                   />
                 </div>
@@ -533,17 +533,17 @@ export default function App() {
                 <div className="flex items-center gap-4 text-xs text-slate-600 mb-4 flex-wrap">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span>Captured <strong>${(capturedCents / 100).toFixed(2)}</strong></span>
+                    <span>Captured <strong className="tabular-nums font-mono">${(capturedCents / 100).toFixed(2)}</strong></span>
                   </div>
                   <span className="text-slate-300">+</span>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                    <span>Active reservations <strong>${(reservedCents / 100).toFixed(2)}</strong></span>
+                    <span>Active reservations <strong className="tabular-nums font-mono">${(reservedCents / 100).toFixed(2)}</strong></span>
                   </div>
                   <span className="text-slate-300">+</span>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-                    <span>Unresolved captures <strong>${(unresolvedCents / 100).toFixed(2)}</strong></span>
+                    <span>Unresolved captures <strong className="tabular-nums font-mono">${(unresolvedCents / 100).toFixed(2)}</strong></span>
                   </div>
                 </div>
               </div>
@@ -551,7 +551,7 @@ export default function App() {
               {/* Card Footer */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                 <span>
-                  Total committed <strong>${(totalCommittedCents / 100).toFixed(2)}</strong> / {committedPct}% of budget
+                  Total committed <strong className="tabular-nums font-mono">${(totalCommittedCents / 100).toFixed(2)}</strong> / {committedPct}% of budget
                 </span>
                 <span className="font-mono text-[11px] text-slate-400">
                   RESETS 00:00 UTC
@@ -565,7 +565,7 @@ export default function App() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-bold text-slate-900">Needs your review</h3>
-                    <span className="bg-amber-100 text-amber-800 text-[11px] font-bold px-2 py-0.2 rounded-full">
+                    <span className="bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold px-2 py-0.5 rounded-md tabular-nums">
                       {pendingPurchases.length}
                     </span>
                   </div>
@@ -708,26 +708,26 @@ export default function App() {
 
                             <td className="py-2.5 pr-2">
                               {pur.status === 'CAPTURED' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                                   Captured
                                 </span>
                               )}
                               {pur.status === 'PENDING_APPROVAL' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
                                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                                   Reserved
                                 </span>
                               )}
                               {pur.status === 'BLOCKED' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
                                   <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
                                   Blocked
                                 </span>
                               )}
                             </td>
 
-                            <td className="py-2.5 text-right font-mono font-semibold text-slate-900">
+                            <td className="py-2.5 text-right font-mono font-semibold text-slate-900 tabular-nums">
                               ${(pur.total_cents / 100).toFixed(2)}
                             </td>
 
@@ -763,7 +763,7 @@ export default function App() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <h3 className="text-sm font-bold text-slate-900">Policy guardrails</h3>
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                     Enforced
                   </span>
@@ -775,14 +775,14 @@ export default function App() {
                 <div className="divide-y divide-slate-100 text-xs">
                   <div className="py-2.5 flex items-center justify-between">
                     <span className="text-slate-600">Auto-approval threshold</span>
-                    <span className="font-bold text-slate-900 font-mono">
+                    <span className="font-bold text-slate-900 font-mono tabular-nums">
                       ${(policy?.approval_threshold_cents ? policy.approval_threshold_cents / 100 : 50).toFixed(2)}
                     </span>
                   </div>
 
                   <div className="py-2.5 flex items-center justify-between">
                     <span className="text-slate-600">Maximum per transaction</span>
-                    <span className="font-bold text-slate-900 font-mono">
+                    <span className="font-bold text-slate-900 font-mono tabular-nums">
                       ${(policy?.max_per_tx_cents ? policy.max_per_tx_cents / 100 : 150).toFixed(2)}
                     </span>
                   </div>
@@ -845,12 +845,12 @@ export default function App() {
                     onChange={(e) => setPrompt(e.target.value)}
                     disabled={isRunning}
                     placeholder="Find me a pair of trail shoes for under $50."
-                    className="flex-1 bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800 transition"
+                    className="flex-1 bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/15 focus:border-slate-700 transition-colors duration-150"
                   />
                   <button
                     type="submit"
                     disabled={isRunning || !prompt.trim()}
-                    className="bg-[#0f172a] hover:bg-[#1e293b] disabled:opacity-50 text-white text-xs font-semibold px-5 py-2.5 rounded-lg flex items-center gap-2 transition shadow-sm whitespace-nowrap"
+                    className="bg-slate-900 hover:bg-slate-800 active:scale-[0.99] disabled:opacity-50 text-white text-xs font-semibold px-5 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-xs whitespace-nowrap"
                   >
                     {isRunning ? (
                       <>
@@ -983,7 +983,7 @@ export default function App() {
                               {entry.reason}
                             </span>
                           </td>
-                          <td className="p-3 text-right font-mono font-bold text-slate-900">
+                          <td className="p-3 text-right font-mono font-bold text-slate-900 tabular-nums">
                             ${(entry.amount_cents / 100).toFixed(2)}
                           </td>
                           <td className="p-3 text-right font-mono text-slate-400 text-[11px]">
