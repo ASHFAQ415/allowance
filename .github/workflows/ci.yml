@@ -1,4 +1,4 @@
-name: CI & Submission Verification
+name: "CI and Submission Verification"
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   test-backend:
-    name: Backend Test Suite (Python ${{ matrix.python-version }})
+    name: "Backend Test Suite (Python ${{ matrix.python-version }})"
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -17,33 +17,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: "Set up Python ${{ matrix.python-version }}"
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run Automated Test Suite (150+ Tests)
+      - name: "Run Automated Test Suite (150+ Tests)"
         run: |
           PYTHONPATH=. python -m unittest discover -s backend/tests -t . -p "test_*.py"
 
-      - name: Run PayPal Orders v2 Smoke Verification
+      - name: "Run PayPal Orders v2 Smoke Verification"
         run: |
           PYTHONPATH=. python scripts/paypal_smoke.py
 
   build-frontend:
-    name: Frontend Typecheck & Build
+    name: "Frontend Typecheck and Build"
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: "Set up Node.js"
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Install dependencies & Build
+      - name: "Install dependencies and Build"
         run: |
           cd frontend
           npm ci
           npm run build
+
+

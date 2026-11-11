@@ -35,6 +35,10 @@ except ImportError:
     class Header:
         def __init__(self, default=..., **kwargs):
             self.default = default
+    class Request:
+        def __init__(self, headers=None, client=None):
+            self.headers = headers or {}
+            self.client = client
     class Response:
         def __init__(self, content="", status_code=200):
             self.content = content
