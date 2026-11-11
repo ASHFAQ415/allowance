@@ -5,10 +5,9 @@ Enforces Invariant 6, Multi-Tenant Isolation, Scoped Identity, and Header-Only I
 
 import hashlib
 import json
-import sqlite3
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 try:
     from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 except ImportError:
