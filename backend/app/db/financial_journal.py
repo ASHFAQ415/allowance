@@ -163,9 +163,12 @@ def record_financial_fact(
                 conn, source_event_key, tenant_id, agent_id, purchase_id, delta_captured_cents,
                 paypal_capture_id or f"CAP_LATE_{fact_id[:8]}", currency
             )
-    except Exception:
-        # If double-entry tables do not exist in legacy isolated mock DBs, allow safe degraded execution
-        pass
+    except sqlite3.OperationalError as op_err:
+        # Only allow missing table error in minimal schema environments; re-raise everything else
+        if "no such table: journal_entries" in str(op_err) or "no such table: accounts" in str(op_err):
+            pass
+        else:
+            raise
     conn.execute(
         """
         INSERT INTO budget_accounting (

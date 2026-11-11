@@ -5,7 +5,7 @@ and time-rule expirations.
 """
 
 from enum import Enum
-from typing import Dict, Set, Optional
+from typing import Dict, Optional, Set, Tuple
 
 
 class PurchaseState(str, Enum):

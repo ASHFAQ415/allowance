@@ -36,6 +36,10 @@ except ImportError:
     class Header:
         def __init__(self, default=..., **kwargs):
             self.default = default
+    class Request:
+        def __init__(self, headers=None, client=None):
+            self.headers = headers or {}
+            self.client = client
     class Response:
         def __init__(self, content="", status_code=200):
             self.content = content
@@ -318,7 +322,7 @@ def admin_reject(
 ):
     """Admin-only rejection of a PENDING_APPROVAL purchase."""
     conn = get_thread_connection()
-    new_state, reason = reject_pending_purchase(conn, purchase_id, admin_actor="admin")
+    new_state, reason = reject_pending_purchase(conn, purchase_id, admin_actor="admin", reason="admin_rejected")
     if new_state.value == "FAILED":
         raise HTTPException(status_code=409, detail=f"Cannot reject: {reason}")
     return {"purchase_id": purchase_id, "status": new_state.value, "reason": reason}

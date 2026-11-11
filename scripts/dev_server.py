@@ -30,6 +30,7 @@ sys.path.insert(0, ROOT_DIR)
 from backend.app.db.connection import get_thread_connection, transactional_session
 from backend.app.db.financial_journal import get_budget_snapshot
 from backend.app.agent.loop import execute_agent_loop
+from backend.app.llm.claude_invoker import create_claude_invoker
 from backend.app.agent.catalog import get_product
 from backend.app.orchestrator.core import (
     get_agent_policy,
@@ -433,11 +434,20 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
 
             # Process run synchronously so UI gets immediate authoritative outcome
             try:
-                ai_mode = "Claude 3.5 Sonnet (ANTHROPIC_API_KEY)" if os.environ.get("ANTHROPIC_API_KEY") else "Deterministic Fallback (no key)"
-                logger.info("ShopMind: Executing with [%s] for prompt: '%s'", ai_mode, prompt)
-                status, reason, cart, trace = execute_agent_loop(prompt)
+                claude_key = os.environ.get("ANTHROPIC_API_KEY")
+                model_invoker = None
+                if claude_key:
+                    try:
+                        model_invoker = create_claude_invoker(claude_key)
+                        logger.info("ShopMind: Executing with [Claude 3.5 Sonnet] for prompt: '%s'", prompt)
+                    except Exception as err:
+                        logger.warning("Claude invoker setup failed: %s", err)
+                if not model_invoker:
+                    logger.info("ShopMind: Executing with [Deterministic Fallback (no key)] for prompt: '%s'", prompt)
+
+                status, reason, cart, trace = execute_agent_loop(prompt, model_invoker=model_invoker)
                 if status == "COMPLETED" and cart:
-                    pid, pstate, decision = submit_cart_to_orchestrator(conn, "tenant_demo", agent_id, run_id, cart, time.time())
+                    pid, pstate, decision = submit_cart_to_orchestrator(conn, tenant_id, agent_id, run_id, cart, time.time())
                     
                     product_name = cart.items[0].name if cart.items else "Product"
                     price_usd = f"{cart.total_cents / 100:.2f}"
@@ -463,7 +473,8 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                         "amount_usd": price_usd,
                         "rule_name": decision.rule_name,
                         "reason": decision.reason,
-                        "outcome": decision.outcome.value
+                        "outcome": decision.outcome.value,
+                        "trace": trace
                     })
                 else:
                     with conn:
@@ -471,7 +482,8 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                     return self._send_json(400, {
                         "run_id": run_id,
                         "status": "FAILED",
-                        "detail": f"Agent could not build cart: {reason}"
+                        "detail": f"Agent could not build cart: {reason}",
+                        "trace": trace
                     })
             except Exception as ex:
                 with conn:

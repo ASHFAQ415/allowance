@@ -266,7 +266,8 @@ def approve_pending_purchase(
 def reject_pending_purchase(
     conn: sqlite3.Connection,
     purchase_id: str,
-    admin_actor: str = "admin"
+    admin_actor: str = "admin",
+    reason: str = "Rejected by admin"
 ) -> Tuple[PurchaseState, str]:
     """Admin rejection of a PENDING_APPROVAL purchase. PayPal is never called."""
     now, now_iso = _now_pair()
@@ -279,11 +280,11 @@ def reject_pending_purchase(
         updated = conn.execute(
             """
             UPDATE purchases
-            SET status = 'REJECTED', status_reason = 'admin_rejected',
+            SET status = 'REJECTED', status_reason = ?,
                 state_entered_at = ?, expires_at = NULL, updated_at = ?
             WHERE id = ? AND status = 'PENDING_APPROVAL';
             """,
-            (now, now_iso, purchase_id)
+            (reason, now, now_iso, purchase_id)
         )
         if updated.rowcount != 1:
             return PurchaseState.FAILED, "purchase_not_pending_approval"
@@ -294,12 +295,12 @@ def reject_pending_purchase(
             INSERT INTO ledger (
                 id, purchase_id, agent_id, from_state, to_state, rule_name,
                 reason, checkpoint, amount_cents, policy_version, actor, created_at
-            ) VALUES (?, ?, ?, 'PENDING_APPROVAL', 'REJECTED', 'ADMIN_REJECTED', 'Rejected by admin', 'P2', ?, 1, ?, ?);
+            ) VALUES (?, ?, ?, 'PENDING_APPROVAL', 'REJECTED', 'ADMIN_REJECTED', ?, 'P2', ?, 1, ?, ?);
             """,
-            (str(uuid.uuid4()), purchase_id, purchase["agent_id"], purchase["total_cents"], admin_actor, now_iso)
+            (str(uuid.uuid4()), purchase_id, purchase["agent_id"], reason, purchase["total_cents"], admin_actor, now_iso)
         )
 
-    return PurchaseState.REJECTED, "admin_rejected"
+    return PurchaseState.REJECTED, reason
 
 
 

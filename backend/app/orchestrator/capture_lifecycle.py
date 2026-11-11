@@ -4,6 +4,7 @@ Enforces Invariant 1 (No Blind Retries) and Invariant 2 (Workflow vs Financial S
 """
 
 import json
+import os
 import sqlite3
 import time
 import uuid
@@ -17,7 +18,7 @@ from ..policy.rules import Checkpoint, Outcome
 from .rechecks import get_agent_policy, reevaluate_purchase, release_purchase_reservation
 
 
-EXPECTED_MERCHANT_ID = "MOCK_MERCHANT_123"
+EXPECTED_MERCHANT_ID = os.environ.get("PAYPAL_EXPECTED_MERCHANT_ID", "MOCK_MERCHANT_123")
 
 
 def extract_nested_capture_info(data: dict) -> Tuple[Optional[str], Optional[float], Optional[str]]:
@@ -262,12 +263,48 @@ def execute_capture_flow(
             cap_id = nested_cap_id or cap_outcome.data.get("id")
 
             # Verify capture amount and currency match purchase total
+            mismatch_reason = None
             if cap_amt is not None:
                 expected_amt = purchase["total_cents"] / 100.0
                 if abs(cap_amt - expected_amt) > 0.001:
-                    return "CAPTURE_UNKNOWN", "capture_amount_mismatch"
-            if cap_curr is not None and purchase["currency"] and cap_curr != purchase["currency"]:
-                return "CAPTURE_UNKNOWN", "capture_currency_mismatch"
+                    mismatch_reason = "capture_amount_mismatch"
+            if not mismatch_reason and cap_curr is not None and purchase["currency"] and cap_curr != purchase["currency"]:
+                mismatch_reason = "capture_currency_mismatch"
+
+            if mismatch_reason:
+                conn.execute(
+                    """
+                    UPDATE purchases
+                    SET status = 'CAPTURE_UNKNOWN', status_reason = ?, updated_at = ?
+                    WHERE id = ? AND status IN ('CAPTURING', 'CAPTURE_UNKNOWN');
+                    """,
+                    (mismatch_reason, now_iso, purchase_id)
+                )
+                conn.execute("UPDATE capture_operations SET state = 'UNKNOWN', updated_at = ? WHERE purchase_id = ?;", (now_iso, purchase_id))
+                conn.execute(
+                    """
+                    INSERT INTO ledger (
+                        id, purchase_id, agent_id, from_state, to_state, rule_name,
+                        reason, checkpoint, amount_cents, policy_version, actor, created_at
+                    ) VALUES (?, ?, ?, 'CAPTURING', 'CAPTURE_UNKNOWN', 'MISMATCH_DETECTED', ?, 'P4', ?, 1, 'orchestrator', ?);
+                    """,
+                    (str(uuid.uuid4()), purchase_id, purchase["agent_id"], mismatch_reason, purchase["total_cents"], now_iso)
+                )
+                record_financial_fact(
+                    conn=conn,
+                    source_event_key=f"mismatch_unknown_{purchase_id}",
+                    tenant_id=purchase["tenant_id"],
+                    agent_id=purchase["agent_id"],
+                    purchase_id=purchase_id,
+                    budget_day=purchase["budget_day"],
+                    fact_type=FactType.CAPTURE_BECAME_UNKNOWN,
+                    delta_reserved_cents=-purchase["total_cents"],
+                    delta_unresolved_cents=purchase["total_cents"],
+                    delta_captured_cents=0,
+                    delta_auto_approved_cents=0,
+                    actor="orchestrator"
+                )
+                return "CAPTURE_UNKNOWN", mismatch_reason
 
             conn.execute(
                 """
@@ -312,17 +349,36 @@ def execute_capture_flow(
             )
             return "CAPTURED", cap_id
 
-        # Case B: Definitive Failure (HTTP 200 with DECLINED status)
-        elif cap_outcome.data and cap_outcome.data.get("status") == "DECLINED":
+        # Case B: Definitive Failure (HTTP 200 DECLINED, or HTTP 422 with INSTRUMENT_DECLINED)
+        is_instrument_declined = False
+        if cap_outcome.data and cap_outcome.data.get("status") == "DECLINED":
+            is_instrument_declined = True
+        elif cap_outcome.status_code == 422 and cap_outcome.data:
+            details = cap_outcome.data.get("details", [])
+            if any(d.get("issue") == "INSTRUMENT_DECLINED" for d in details) or cap_outcome.error_class == "INSTRUMENT_DECLINED":
+                is_instrument_declined = True
+        elif cap_outcome.error_class == "INSTRUMENT_DECLINED":
+            is_instrument_declined = True
+
+        if is_instrument_declined:
             conn.execute(
                 """
                 UPDATE purchases
                 SET status = 'FAILED', status_reason = 'capture_declined', updated_at = ?
-                WHERE id = ? AND status = 'CAPTURING';
+                WHERE id = ? AND status IN ('CAPTURING', 'CAPTURE_UNKNOWN');
                 """,
                 (now_iso, purchase_id)
             )
             conn.execute("UPDATE capture_operations SET state = 'DEFINITIVE_FAILURE', updated_at = ? WHERE purchase_id = ?;", (now_iso, purchase_id))
+            conn.execute(
+                """
+                INSERT INTO ledger (
+                    id, purchase_id, agent_id, from_state, to_state, rule_name,
+                    reason, checkpoint, amount_cents, policy_version, actor, created_at
+                ) VALUES (?, ?, ?, 'CAPTURING', 'FAILED', 'INSTRUMENT_DECLINED', 'Payment instrument declined by PayPal', 'P4', ?, 1, 'paypal', ?);
+                """,
+                (str(uuid.uuid4()), purchase_id, purchase["agent_id"], purchase["total_cents"], now_iso)
+            )
             # Release reservation
             record_financial_fact(
                 conn=conn,

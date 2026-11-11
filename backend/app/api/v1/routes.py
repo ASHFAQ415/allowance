@@ -87,7 +87,7 @@ def get_current_credential(
                 agent_id="default",
                 credential_id="cred_demo",
                 name="Demo Dev Context",
-                scopes=["propose", "read", "admin"],
+                scopes=["propose", "read"],
                 expires_at=None
             )
         raise HTTPException(status_code=401, detail="Missing API Key or Authorization header.")

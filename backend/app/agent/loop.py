@@ -61,9 +61,14 @@ def run_deterministic_fallback(query: str) -> Optional[FrozenCart]:
     # Pick the top-scoring matched product!
     best = approved_matches[0]
 
+    # Clean query of price constraints before parsing quantity so "$5" or "under $50" isn't mistaken for quantity
+    cleaned_for_qty = re.sub(r"(?:under|below|less\s+than)\s*\$?\s*\d+(?:\.\d+)?", "", query.lower())
+    cleaned_for_qty = re.sub(r"\$\s*\d+(?:\.\d+)?", "", cleaned_for_qty)
+    cleaned_for_qty = re.sub(r"\b\d+\s*(?:dollars|bucks|cents)\b", "", cleaned_for_qty)
+
     # Check if quantity was requested (e.g. "buy 2 boxes")
     qty = 1
-    qty_match = re.search(r"\b(\d+)\s*(?:boxes|pairs|items|pack|units|bags|bottles)?\b", query.lower())
+    qty_match = re.search(r"\b(\d+)\s*(?:boxes|pairs|items|pack|packs|units|bags|bottles)?\b", cleaned_for_qty)
     if qty_match:
         try:
             parsed_qty = int(qty_match.group(1))

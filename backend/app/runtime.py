@@ -14,6 +14,7 @@ import time
 from typing import Optional
 
 from .agent.loop import execute_agent_loop
+from .llm.claude_invoker import create_claude_invoker
 from .db.bootstrap import seed_defaults
 from .db.connection import DEFAULT_DB_PATH, create_connection, init_db, transactional_session
 from .orchestrator.core import submit_cart_to_orchestrator
@@ -80,11 +81,20 @@ def process_agent_run(run_id: str, worker_id: str) -> None:
         with transactional_session(conn):
             _record_event(conn, tenant_id, "RUN_STARTED", run_id, {"worker_id": worker_id})
 
-        ai_mode = "Claude 3.5 Sonnet (ANTHROPIC_API_KEY)" if os.environ.get("ANTHROPIC_API_KEY") else "Deterministic Fallback (no key)"
-        logger.info("ShopMind: Executing run %s with [%s] for prompt: '%s'", run_id, ai_mode, prompt)
+        claude_key = os.environ.get("ANTHROPIC_API_KEY")
+        model_invoker = None
+        if claude_key:
+            try:
+                model_invoker = create_claude_invoker(claude_key)
+                logger.info("ShopMind: Executing run %s with [Claude 3.5 Sonnet] for prompt: '%s'", run_id, prompt)
+            except Exception as e:
+                logger.warning("Failed to initialize Claude invoker: %s. Using fallback.", e)
+
+        if not model_invoker:
+            logger.info("ShopMind: Executing run %s with [Deterministic Fallback (no key)] for prompt: '%s'", run_id, prompt)
 
         try:
-            status, reason, cart, trace = execute_agent_loop(prompt)
+            status, reason, cart, trace = execute_agent_loop(prompt, model_invoker=model_invoker)
         except Exception as exc:  # noqa: BLE001 - agent failures must not kill the worker
             _fail_run(conn, run_id, tenant_id, "agent_error", [{"event": "agent_error", "error": str(exc)}])
             return
