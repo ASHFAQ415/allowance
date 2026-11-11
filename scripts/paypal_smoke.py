@@ -107,6 +107,7 @@ def run_smoke_verification():
     client_id = os.environ.get("PAYPAL_CLIENT_ID")
     client_secret = os.environ.get("PAYPAL_CLIENT_SECRET")
     env = os.environ.get("PAYPAL_ENV", "sandbox")
+    expected_merchant_id = os.environ.get("PAYPAL_EXPECTED_MERCHANT_ID", "MOCK_MERCHANT_123")
 
     if client_id and client_secret and "mock" not in client_id.lower():
         print(f"[*] Running against LIVE PayPal {env.upper()} endpoint...")
@@ -168,14 +169,19 @@ def run_smoke_verification():
     get_status = get_outcome.data.get("status") if get_outcome.data else "UNKNOWN"
     units = get_outcome.data.get("purchase_units", []) if get_outcome.data else []
     amount_val = units[0].get("amount", {}).get("value") if units else None
+    payee_merchant_id = units[0].get("payee", {}).get("merchant_id") if units else None
 
-    log_step("Step 3: Server GET Order Verification", "PASSED" if get_outcome.success else "FAILED", {
+    merchant_ok = (payee_merchant_id is None) or (payee_merchant_id == expected_merchant_id)
+
+    log_step("Step 3: Server GET Order Verification", "PASSED" if (get_outcome.success and merchant_ok) else "FAILED", {
         "order_id": order_id,
         "verified_status": get_status,
         "amount_usd": amount_val,
-        "expected_amount_usd": "45.00"
+        "expected_amount_usd": "45.00",
+        "merchant_id": payee_merchant_id,
+        "expected_merchant_id": expected_merchant_id
     })
-    if not get_outcome.success or amount_val != "45.00":
+    if not get_outcome.success or amount_val != "45.00" or not merchant_ok:
         sys.exit(1)
 
     # --- Step 4: Buyer Approval ---

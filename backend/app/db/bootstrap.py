@@ -7,6 +7,7 @@ command use exactly the same defaults.
 
 import json
 import time
+from backend.app.auth.credentials import hash_api_key
 from backend.app.db.double_entry import seed_chart_of_accounts
 from backend.app.paypal.merchants import SUPPORTED_MERCHANTS
 
@@ -173,4 +174,17 @@ def seed_defaults(conn) -> None:
             }),
             now_iso,
         )
+    )
+
+    # 4. Seed Deterministic Postman & Dev API Key
+    demo_key = "ak_test_dev_token_allowance_2026_xyz"
+    demo_hash = hash_api_key(demo_key)
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO agent_credentials (
+            id, tenant_id, agent_id, name, key_hash, key_prefix,
+            scopes_json, expires_at, revoked_at, created_at
+        ) VALUES ('cred_demo_postman', ?, ?, 'Postman & Dev Test Key', ?, 'ak_test_dev...', ?, NULL, NULL, ?);
+        """,
+        (DEFAULT_TENANT_ID, DEFAULT_AGENT_ID, demo_hash, json.dumps(["propose", "read", "admin"]), now_iso)
     )

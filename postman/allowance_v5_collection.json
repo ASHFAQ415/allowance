@@ -85,9 +85,10 @@
                   "    pm.expect(json.currency).to.eql('USD');",
                   "});",
                   "pm.test('Cart hash and quote ID exist', function () {",
-                  "    pm.expect(json.id).to.be.a('string');",
+                  "    var quoteId = json.id || json.quote_id;",
+                  "    pm.expect(quoteId).to.be.a('string');",
                   "    pm.expect(json.cart_hash).to.be.a('string');",
-                  "    pm.environment.set('quoteId', json.id);",
+                  "    pm.environment.set('quoteId', quoteId);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -173,7 +174,8 @@
                   "var json = pm.response.json();",
                   "pm.test('Allowance contains daily budget and limits', function () {",
                   "    pm.expect(json.daily_budget_cents).to.be.above(0);",
-                  "    pm.expect(json.remaining_allowance_cents).to.be.at.least(0);",
+                  "    var remaining = json.remaining_allowance_cents !== undefined ? json.remaining_allowance_cents : json.remaining_cents;",
+                  "    pm.expect(remaining).to.be.at.least(0);",
                   "    pm.expect(json.frozen).to.be.a('boolean');",
                   "});"
                 ],
@@ -227,9 +229,10 @@
                   "});",
                   "var json = pm.response.json();",
                   "pm.test('Purchase request has valid ID and status', function () {",
-                  "    pm.expect(json.id).to.be.a('string');",
+                  "    var purchaseId = json.id || json.purchase_request_id;",
+                  "    pm.expect(purchaseId).to.be.a('string');",
                   "    pm.expect(json.status).to.be.oneOf(['AUTO_APPROVED', 'PENDING_APPROVAL', 'CAPTURED']);",
-                  "    pm.environment.set('purchaseId', json.id);",
+                  "    pm.environment.set('purchaseId', purchaseId);",
                   "});"
                 ],
                 "type": "text/javascript"

@@ -15,13 +15,14 @@ DEFAULT_DB_PATH = os.environ.get("DB_PATH", "allowance.db")
 DEFAULT_BUSY_TIMEOUT_MS = int(os.environ.get("BUSY_TIMEOUT_MS", "5000"))
 
 
-def create_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+def create_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     """
     Creates and configures an isolated SQLite connection with hardened financial pragmas.
     isolation_level=None allows explicit transaction control (BEGIN IMMEDIATE).
     """
+    target_path = db_path or os.environ.get("DB_PATH", DEFAULT_DB_PATH)
     conn = sqlite3.connect(
-        db_path,
+        target_path,
         isolation_level=None,  # Autocommit mode: we control BEGIN / COMMIT explicitly
         timeout=DEFAULT_BUSY_TIMEOUT_MS / 1000.0,
         check_same_thread=False
@@ -37,10 +38,17 @@ def create_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     return conn
 
 
-def get_thread_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+def get_thread_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     """Returns a thread-local SQLite connection."""
-    if not hasattr(_local, "conn") or _local.conn is None:
-        _local.conn = create_connection(db_path)
+    target_path = db_path or os.environ.get("DB_PATH", DEFAULT_DB_PATH)
+    if not hasattr(_local, "conn") or _local.conn is None or getattr(_local, "db_path", None) != target_path:
+        if hasattr(_local, "conn") and _local.conn is not None:
+            try:
+                _local.conn.close()
+            except Exception:
+                pass
+        _local.conn = create_connection(target_path)
+        _local.db_path = target_path
     return _local.conn
 
 
@@ -51,10 +59,11 @@ def close_thread_connection() -> None:
             _local.conn.close()
         finally:
             _local.conn = None
+            _local.db_path = None
 
 
 @contextmanager
-def transactional_session(conn: Optional[sqlite3.Connection] = None, db_path: str = DEFAULT_DB_PATH) -> Generator[sqlite3.Connection, None, None]:
+def transactional_session(conn: Optional[sqlite3.Connection] = None, db_path: Optional[str] = None) -> Generator[sqlite3.Connection, None, None]:
     """
     Context manager for atomic financial operations using BEGIN IMMEDIATE.
     Guarantees that a writer lock is acquired upfront and all mutations commit or rollback together.
@@ -69,15 +78,16 @@ def transactional_session(conn: Optional[sqlite3.Connection] = None, db_path: st
         raise
 
 
-def init_db(db_path: str = DEFAULT_DB_PATH, schema_path: Optional[str] = None) -> None:
+def init_db(db_path: Optional[str] = None, schema_path: Optional[str] = None) -> None:
     """Initializes the database schema and triggers."""
+    target_path = db_path or os.environ.get("DB_PATH", DEFAULT_DB_PATH)
     if schema_path is None:
         schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
     
     with open(schema_path, "r", encoding="utf-8") as f:
         schema_sql = f.read()
         
-    conn = create_connection(db_path)
+    conn = create_connection(target_path)
     try:
         conn.executescript(schema_sql)
         _apply_light_migrations(conn)

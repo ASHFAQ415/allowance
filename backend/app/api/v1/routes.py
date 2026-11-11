@@ -123,6 +123,7 @@ def get_allowance(
         "tenant_id": cred.tenant_id,
         "daily_budget_cents": policy.daily_budget_cents,
         "remaining_cents": remaining_cents,
+        "remaining_allowance_cents": remaining_cents,
         "reserved_cents": snapshot.reserved_cents,
         "captured_cents": snapshot.captured_cents,
         "unresolved_cents": snapshot.unresolved_cents,
@@ -158,6 +159,7 @@ def request_quote(
         raise HTTPException(status_code=422, detail=str(e))
 
     return {
+        "id": quote_id,
         "quote_id": quote_id,
         "items": [
             {
@@ -248,8 +250,9 @@ def submit_purchase_request(
 
         response.status_code = 200
         return {
-            "run_id": existing_run["id"] if existing_run else None,
+            "id": existing_pur["id"] if existing_pur else None,
             "purchase_request_id": existing_pur["id"] if existing_pur else None,
+            "run_id": existing_run["id"] if existing_run else None,
             "status": existing_pur["status"] if existing_pur else existing_run["status"],
             "idempotent_replay": True
         }
@@ -288,6 +291,7 @@ def submit_purchase_request(
 
     response.status_code = 201 if target_state == PurchaseState.CAPTURED else 202
     return {
+        "id": pid,
         "purchase_request_id": pid,
         "run_id": run_id,
         "status": target_state.value,
@@ -378,6 +382,7 @@ def get_purchase_request(
 @v1_router.post("/purchase-requests/{purchase_id}/approve")
 def approve_request(
     purchase_id: str,
+    payload: Optional[dict] = None,
     cred: CredentialContext = Depends(get_current_credential)
 ):
     """

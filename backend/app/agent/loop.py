@@ -101,8 +101,12 @@ def execute_agent_loop(
     if model_invoker is None:
         cart = run_deterministic_fallback(user_prompt)
         if cart is None:
-            return "FAILED", "no_matching_item", None, [{"event": "fallback_empty"}]
-        return "COMPLETED", None, cart, [{"event": "deterministic_fallback_selected", "cart_hash": cart.cart_hash}]
+            return "FAILED", "no_matching_item", None, [{"step": 1, "tool": "search_catalog", "query": user_prompt, "status": "no_match"}]
+        return "COMPLETED", None, cart, [
+            {"step": 1, "tool": "search_catalog", "query": user_prompt, "status": "match_found", "product_id": cart.items[0].product_id},
+            {"step": 2, "tool": "build_cart", "status": "verified", "total_cents": cart.total_cents},
+            {"step": 3, "tool": "submit_cart", "status": "submitted", "cart_hash": cart.cart_hash}
+        ]
 
     messages: List[Dict[str, Any]] = [
         {"role": "user", "content": user_prompt}

@@ -4,7 +4,7 @@ import {
   Clock, ArrowRight, ArrowUpRight, CheckCircle2, XCircle, 
   AlertCircle, Calendar, HelpCircle, 
   Building2, ChevronDown, ChevronsUpDown, Sliders, 
-  FileText, BookOpen, Lock, RefreshCw, Key, X, Check
+  FileText, BookOpen, Lock, RefreshCw, Key, X, Check, Terminal
 } from 'lucide-react';
 import { Purchase, LedgerEntry, Policy, BudgetSnapshot } from './types';
 
@@ -28,6 +28,8 @@ export default function App() {
   const [showLedgerDrawer, setShowLedgerDrawer] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'warn' | 'error' | 'info'; title: string; desc: string } | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [agentTrace, setAgentTrace] = useState<any[] | null>(null);
 
   const fetchDashboardData = async () => {
     try {
@@ -62,8 +64,10 @@ export default function App() {
         }
       });
       if (budRes.ok) setBudget(await budRes.json());
+      setFetchError(null);
     } catch (err) {
       console.error('Failed to fetch dashboard data', err);
+      setFetchError('Could not connect to Allowance backend runtime. Showing cached state.');
     }
   };
 
@@ -102,6 +106,11 @@ export default function App() {
 
       if (res.ok) {
         const data = await res.json();
+        if (data.trace && Array.isArray(data.trace)) {
+          setAgentTrace(data.trace);
+        } else {
+          setAgentTrace(null);
+        }
         if (data.status === 'AUTO_APPROVED' || data.status === 'CAPTURED') {
           setNotification({
             type: 'success',
@@ -124,6 +133,9 @@ export default function App() {
         await fetchDashboardData();
       } else {
         const err = await res.json();
+        if (err.trace && Array.isArray(err.trace)) {
+          setAgentTrace(err.trace);
+        }
         setNotification({
           type: 'error',
           title: 'Proposal Blocked by Policy',
@@ -214,6 +226,111 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to approve purchase', err);
+    }
+  };
+
+  const handleReject = async (purchaseId: string) => {
+    if (!window.confirm("Are you sure you want to reject this purchase request?")) return;
+    try {
+      const res = await fetch(`/api/purchases/${purchaseId}/reject`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Admin-Token': adminToken 
+        },
+        body: JSON.stringify({ reason: "Rejected by supervisor from Review Queue" })
+      });
+      if (res.ok) {
+        setNotification({
+          type: 'info',
+          title: 'Request Rejected',
+          desc: `Purchase ${purchaseId.slice(0, 8)} rejected. Reserved budget released back to daily spending pool.`
+        });
+        await fetchDashboardData();
+      }
+    } catch (err) {
+      console.error('Failed to reject purchase', err);
+    }
+  };
+
+  const renderStatusBadge = (status: string) => {
+    switch (status) {
+      case 'CAPTURED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            Captured
+          </span>
+        );
+      case 'AUTO_APPROVED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            Auto-Approved
+          </span>
+        );
+      case 'BUYER_APPROVED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            Buyer Approved
+          </span>
+        );
+      case 'PAYPAL_ORDER_CREATED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-700 bg-cyan-50 border border-cyan-200 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+            Order Created
+          </span>
+        );
+      case 'PENDING_APPROVAL':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            Reserved
+          </span>
+        );
+      case 'BLOCKED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+            Blocked
+          </span>
+        );
+      case 'REJECTED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+            Rejected
+          </span>
+        );
+      case 'FAILED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+            Failed
+          </span>
+        );
+      case 'EXPIRED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
+            Expired
+          </span>
+        );
+      case 'CAPTURE_UNKNOWN':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+            Capture Uncertain
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">
+            {status}
+          </span>
+        );
     }
   };
 
@@ -367,7 +484,7 @@ export default function App() {
                 }`}
               >
                 <BookOpen className="w-4 h-4" />
-                <span>Ledger</span>
+                <span>Workflow ledger</span>
               </button>
             </nav>
           </div>
@@ -468,6 +585,25 @@ export default function App() {
             </button>
           </div>
         </header>
+
+        {/* Backend Disconnection Banner */}
+        {fetchError && (
+          <div className="mx-8 mt-4 p-3.5 rounded-xl border bg-rose-50 border-rose-200 text-rose-900 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <div>
+                <span className="font-bold block">Backend Disconnected</span>
+                <span className="text-slate-700">{fetchError}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => fetchDashboardData()}
+              className="px-2.5 py-1 bg-white border border-rose-200 rounded text-rose-700 hover:bg-rose-100 font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Toast Notification Banner (when active) */}
         {notification && (
@@ -709,13 +845,21 @@ export default function App() {
                 </div>
 
                 {topPending ? (
-                  <button
-                    onClick={() => handleApprove(topPending.id)}
-                    className="bg-[#0f172a] hover:bg-[#1e293b] text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5 transition shadow-sm"
-                  >
-                    <span>Review request</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleReject(topPending.id)}
+                      className="bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 text-xs font-semibold px-3 py-2 rounded-lg transition shadow-xs"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => handleApprove(topPending.id)}
+                      className="bg-[#0f172a] hover:bg-[#1e293b] text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5 transition shadow-sm"
+                    >
+                      <span>Approve</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 ) : (
                   <button
                     disabled
@@ -773,32 +917,19 @@ export default function App() {
                               </span>
                               <span className="text-[11px] text-slate-500">
                                 {getMerchantName(pur.merchant_ids)} • {
-                                  pur.status === 'CAPTURED' ? 'Auto-approved' :
-                                  pur.status === 'PENDING_APPROVAL' ? 'Human review' :
-                                  pur.status === 'BLOCKED' ? 'R1 • Merchant not allowlisted' : 'Processing'
+                                  pur.status === 'BLOCKED'
+                                    ? (pur.status_reason || 'R1 • Merchant not allowlisted')
+                                    : pur.status === 'CAPTURED'
+                                    ? 'Auto-approved & settled'
+                                    : pur.status === 'PENDING_APPROVAL'
+                                    ? 'Human review required'
+                                    : (pur.status_reason || pur.status)
                                 }
                               </span>
                             </td>
 
                             <td className="py-2.5 pr-2">
-                              {pur.status === 'CAPTURED' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                  Captured
-                                </span>
-                              )}
-                              {pur.status === 'PENDING_APPROVAL' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                                  Reserved
-                                </span>
-                              )}
-                              {pur.status === 'BLOCKED' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                                  Blocked
-                                </span>
-                              )}
+                              {renderStatusBadge(pur.status)}
                             </td>
 
                             <td className="py-2.5 text-right font-mono font-semibold text-slate-900 tabular-nums">
@@ -826,7 +957,7 @@ export default function App() {
                   onClick={() => setShowLedgerDrawer(true)}
                   className="font-medium text-slate-500 hover:text-slate-800 transition flex items-center gap-0.5"
                 >
-                  <span>Open ledger</span>
+                  <span>Open workflow ledger</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -982,6 +1113,42 @@ export default function App() {
                     <ArrowUpRight className="w-3 h-3 text-slate-400" />
                   </button>
                 </div>
+
+                {/* AI Agent Execution Trace */}
+                {agentTrace && (
+                  <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700 mb-2 font-sans">
+                      <span className="flex items-center gap-1.5">
+                        <Terminal className="w-3.5 h-3.5 text-slate-500" />
+                        AI Agent Execution Trace
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setAgentTrace(null)}
+                        className="text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-1.5 text-[11px]">
+                      {agentTrace.map((step, idx) => (
+                        <div key={idx} className="flex items-start gap-2 bg-white p-2 rounded border border-slate-200/60 shadow-2xs">
+                          <span className="text-slate-400 font-semibold">{step.step || idx + 1}.</span>
+                          <div className="flex-1 font-sans">
+                            <span className="font-semibold text-slate-800">
+                              {step.tool || step.event || 'step'}
+                            </span>
+                            {step.query && <span className="text-slate-600 block text-[10px] font-mono">Query: "{step.query}"</span>}
+                            {step.status && <span className="text-slate-500 block text-[10px]">Status: {step.status}</span>}
+                            {step.total_cents && <span className="text-slate-600 block text-[10px] font-mono">Cart Total: ${(step.total_cents / 100).toFixed(2)}</span>}
+                            {step.cart_hash && <span className="text-slate-500 block text-[10px] font-mono">Hash: {step.cart_hash.slice(0, 16)}...</span>}
+                            {step.error && <span className="text-rose-600 block text-[10px]">Error: {step.error}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
             </div>
@@ -1006,10 +1173,10 @@ export default function App() {
               <div>
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <BookOpen className="w-4 h-4 text-emerald-600" />
-                  Immutable Financial General Ledger
+                  Workflow Ledger
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Append-only journal entries. Enforces sum(Debits) == sum(Credits) per currency.
+                  Append-only state transitions & double-entry financial events.
                 </p>
               </div>
               <button 

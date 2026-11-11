@@ -37,6 +37,7 @@ from backend.app.orchestrator.core import (
     submit_cart_to_orchestrator,
     create_paypal_order_for_purchase,
     approve_pending_purchase,
+    reject_pending_purchase,
 )
 from backend.app.orchestrator.capture_lifecycle import (
     execute_capture_flow,
@@ -352,7 +353,8 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                 return
             from backend.app.db.connection import close_thread_connection
             close_thread_connection()
-            seed_database("allowance.db", reset=True)
+            db_path = os.environ.get("DB_PATH", os.path.join(ROOT_DIR, "allowance.db"))
+            seed_database(db_path, reset=True)
             return self._send_json(200, {"status": "ok", "message": "Demo database freshly seeded."})
 
         if path == "/api/freeze":
@@ -411,6 +413,18 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                         conn.execute("UPDATE purchases SET status = 'BUYER_APPROVED' WHERE id = ?;", (purchase_id,))
                         execute_capture_flow(conn, purchase_id, mock_paypal, boot_id="dev_boot")
                 return self._send_json(200, {"purchase_id": purchase_id, "status": new_state.value, "reason": reason})
+            except Exception as e:
+                return self._send_json(400, {"detail": str(e)})
+
+        if path.startswith("/api/purchases/") and path.endswith("/reject"):
+            if not self._require_admin():
+                return
+            purchase_id = path.split("/")[3]
+            reason = payload.get("reason", "Rejected by admin from dashboard")
+            conn = get_thread_connection()
+            try:
+                new_state, res_reason = reject_pending_purchase(conn, purchase_id, admin_actor="admin_dashboard", reason=reason)
+                return self._send_json(200, {"purchase_id": purchase_id, "status": new_state.value, "reason": res_reason})
             except Exception as e:
                 return self._send_json(400, {"detail": str(e)})
 

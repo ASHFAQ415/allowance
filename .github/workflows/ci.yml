@@ -1,0 +1,49 @@
+name: CI & Submission Verification
+
+on:
+  push:
+    branches: [ "main", "final-fixes" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-backend:
+    name: Backend Test Suite (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run Automated Test Suite (150+ Tests)
+        run: |
+          PYTHONPATH=. python -m unittest discover -s backend/tests -t . -p "test_*.py"
+
+      - name: Run PayPal Orders v2 Smoke Verification
+        run: |
+          PYTHONPATH=. python scripts/paypal_smoke.py
+
+  build-frontend:
+    name: Frontend Typecheck & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies & Build
+        run: |
+          cd frontend
+          npm ci
+          npm run build

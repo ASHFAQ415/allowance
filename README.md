@@ -4,9 +4,9 @@
 > *Autonomous AI Spending Control, Policy Engine & Double-Entry Financial Authorization Platform.*  
 > Built for the **PayPal AI Hackathon 2026**.
 
-[![Tests Passing](https://img.shields.io/badge/Tests-137%20passing-brightgreen.svg)](#6-automated-testing-137--137-passing)
-[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
-[![PayPal Sandbox](https://img.shields.io/badge/PayPal-Orders%20v2%20Sandbox-003087.svg)](docs/sandbox-verification.md)
+[![Tests Passing](https://img.shields.io/badge/Tests-157%20passing-brightgreen.svg)](#6-automated-testing-157--157-passing)
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://www.python.org/)
+[![PayPal Orders v2](https://img.shields.io/badge/PayPal-Orders%20v2%20(Sandbox--Verified%20%7C%20Mock%20Rail)-003087.svg)](docs/sandbox-verification.md)
 [![Submission Readiness](https://img.shields.io/badge/Submission-Readiness%20Verified-blue.svg)](docs/submission_readiness_report.md)
 [![Postman Collection](https://img.shields.io/badge/Postman-Collection%20v2.1-FF6C37.svg)](postman/allowance_v5_collection.json)
 [![Render Blueprint](https://img.shields.io/badge/Render-Blueprint%20Included-46E3B7.svg)](render.yaml)
@@ -103,8 +103,8 @@ Allowance operates in two payment modes and two AI agent modes:
 
 | Mode Category | Mode Name | Trigger / Config | Requires Credentials? | Behavior |
 |---|---|---|---|---|
-| **Payment Rails** | **Mock Mode** *(Default)* | `PAYPAL_MODE=mock` (or omitted) | **No keys required** | In-memory Orders v2 state machine with strict schema parity, integer-cent arithmetic, and durable idempotency. |
-| **Payment Rails** | **Sandbox Mode** | `PAYPAL_MODE=sandbox` in `.env` | **PayPal Sandbox App** | Connects to `https://api-m.sandbox.paypal.com/v2/checkout/orders` with live buyer consent and nested capture verification. |
+| **Payment Rails** | **Mock Mode** *(Default)* | `PAYPAL_MODE=mock` (or omitted) | **No keys required** | In-memory Orders v2 state machine with strict schema parity, integer-cent arithmetic, durable idempotency, and simulated buyer consent (default for local dev and dashboard demo). |
+| **Payment Rails** | **Sandbox Mode** | `PAYPAL_MODE=sandbox` in `.env` | **PayPal Sandbox App** | PayPal Orders v2 (sandbox-verified via `scripts/paypal_smoke.py`; connects to `https://api-m.sandbox.paypal.com/v2/checkout/orders` with live buyer consent and nested capture verification). |
 | **AI Agent** | **Deterministic Fallback** *(Default)* | `ANTHROPIC_API_KEY` omitted | **No keys required** (Works offline) | Parses search query against verified catalog, calculates quantities, and builds compliant cart with zero external network dependencies. |
 | **AI Agent** | **Claude 3.5 Sonnet** | `ANTHROPIC_API_KEY` set in `.env` | **Anthropic API Key** | Uses Claude 3.5 Sonnet with function calling to explore catalog, evaluate specifications, and construct cart. |
 
@@ -155,7 +155,7 @@ Every operation within Allowance strictly adheres to [`.agents/rules/financial_s
 | Task | Windows (PowerShell) | macOS / Linux (Bash) |
 |---|---|---|
 | **Run Dev Server** | `$env:PYTHONPATH="." ; python scripts/dev_server.py` | `PYTHONPATH=. python3 scripts/dev_server.py` |
-| **Run Tests (137)** | `$env:PYTHONPATH="." ; python -m unittest discover -s backend/tests -t . -p "test_*.py"` | `PYTHONPATH=. python3 -m unittest discover -s backend/tests -t . -p "test_*.py"` |
+| **Run Tests (157)** | `$env:PYTHONPATH="." ; python -m unittest discover -s backend/tests -t . -p "test_*.py"` | `PYTHONPATH=. python3 -m unittest discover -s backend/tests -t . -p "test_*.py"` |
 | **Reset Database** | `python scripts/seed_db.py --reset` | `python3 scripts/seed_db.py --reset` |
 | **PayPal Smoke Test** | `python scripts/paypal_smoke.py` | `python3 scripts/paypal_smoke.py` |
 | **Build Frontend** | `cd frontend ; npm run build ; cd ..` | `cd frontend && npm run build && cd ..` |
@@ -163,14 +163,14 @@ Every operation within Allowance strictly adheres to [`.agents/rules/financial_s
 
 ---
 
-## 6. Automated Testing (137 / 137 Passing)
+## 6. Automated Testing (157 / 157 Passing)
 
-Allowance features a 137-test automated verification suite covering unit isolation, adversarial race conditions, double-entry balancing, and multi-tenant security.
+Allowance features a 157-test automated verification suite covering unit isolation, adversarial race conditions, double-entry balancing, Claude agent function-calling, and multi-tenant security across both Python 3.11 and Python 3.14.
 
 ```text
-.........................................................................................................................................
+.............................................................................................................................................................
 ----------------------------------------------------------------------
-Ran 137 tests in 13.010s
+Ran 157 tests in 8.701s
 
 OK
 ```
@@ -377,7 +377,7 @@ The Allowance project was **created entirely during the official PayPal AI Hacka
 - **Hackathon Currency Focus vs. Multi-Currency Engine:** For the global hackathon evaluation, catalog prices and default policy thresholds are denominated in USD ($) for standard compatibility with PayPal developer sandbox tools. However, the double-entry accounting engine already indexes budgets and enforces balance constraints independently per currency (`USD`, `EUR`, `GBP`, `CAD`, `AUD`, `JPY`, `INR`), providing turnkey architectural support for international client deployments in Allowance v5.1.
 - **In-Flight Transport Recall:** Once HTTP bytes are accepted by PayPal, an emergency freeze cannot recall an in-flight network packet if PayPal settles it before the freeze is processed.
 - **Unresolved Capture Encumbrance:** If a capture attempt enters an ambiguous transport state (e.g. read timeout), the budget reservation remains locked and committed until either authoritative reconciliation establishes settlement or the budget day expires.
-- **Adversarial Scenarios vs. Test Count:** The phrase "53 adversarial scenarios" refers to the comprehensive fault-injection and protocol stress-testing matrix evaluated within the **137 automated unit and integration tests**.
+- **Adversarial Scenarios vs. Test Count:** The phrase "53 adversarial scenarios" refers to the comprehensive fault-injection and protocol stress-testing matrix evaluated within the **151 automated unit and integration tests**.
 - **Single-Process Prototype Constraint:** The prototype uses SQLite in WAL mode with `BEGIN IMMEDIATE` serialization. For production multi-tenant scale, see the PostgreSQL migration roadmap in the [Project Status Report](project_status_report.md).
 - **Buyer Consent vs. Zero-Click Charging:** Personal purchases require 2-step approval (supervisor check + PayPal buyer consent). True zero-click autonomous recurring payments require PayPal Vaulting / Billing Agreements, which require dedicated partner approval.
 
