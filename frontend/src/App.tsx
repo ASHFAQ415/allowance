@@ -17,6 +17,12 @@ export default function App() {
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [budget, setBudget] = useState<BudgetSnapshot | null>(null);
   
+  // Workspace selection (Demo Organization vs Personal Edition)
+  type Workspace = 'organization' | 'personal';
+  const [workspace, setWorkspace] = useState<Workspace>(
+    () => (localStorage.getItem('allowance_workspace') as Workspace) ?? 'organization'
+  );
+
   // Navigation & Modals
   const [activeNav, setActiveNav] = useState<'overview' | 'review' | 'purchases' | 'agents' | 'policies' | 'ledger'>('overview');
   const [showLedgerDrawer, setShowLedgerDrawer] = useState(false);
@@ -25,23 +31,35 @@ export default function App() {
 
   const fetchDashboardData = async () => {
     try {
-      const polRes = await fetch('/api/policy', {
-        headers: { 'X-Demo-Session': 'demo-session-token-allowance-hackathon-2026' }
+      const polRes = await fetch(`/api/policy?workspace=${workspace}`, {
+        headers: { 
+          'X-Demo-Session': 'demo-session-token-allowance-hackathon-2026',
+          'X-Workspace': workspace
+        }
       });
       if (polRes.ok) setPolicy(await polRes.json());
 
-      const purRes = await fetch('/api/purchases', {
-        headers: { 'X-Demo-Session': 'demo-session-token-allowance-hackathon-2026' }
+      const purRes = await fetch(`/api/purchases?workspace=${workspace}`, {
+        headers: { 
+          'X-Demo-Session': 'demo-session-token-allowance-hackathon-2026',
+          'X-Workspace': workspace
+        }
       });
       if (purRes.ok) setPurchases(await purRes.json());
 
-      const ledRes = await fetch('/api/ledger', {
-        headers: { 'X-Demo-Session': 'demo-session-token-allowance-hackathon-2026' }
+      const ledRes = await fetch(`/api/ledger?workspace=${workspace}`, {
+        headers: { 
+          'X-Demo-Session': 'demo-session-token-allowance-hackathon-2026',
+          'X-Workspace': workspace
+        }
       });
       if (ledRes.ok) setLedger(await ledRes.json());
 
-      const budRes = await fetch('/api/budget', {
-        headers: { 'X-Demo-Session': 'demo-session-token-allowance-hackathon-2026' }
+      const budRes = await fetch(`/api/budget?workspace=${workspace}`, {
+        headers: { 
+          'X-Demo-Session': 'demo-session-token-allowance-hackathon-2026',
+          'X-Workspace': workspace
+        }
       });
       if (budRes.ok) setBudget(await budRes.json());
     } catch (err) {
@@ -50,10 +68,15 @@ export default function App() {
   };
 
   useEffect(() => {
+    localStorage.setItem('allowance_workspace', workspace);
+    fetchDashboardData();
+  }, [workspace]);
+
+  useEffect(() => {
     fetchDashboardData();
     const interval = setInterval(fetchDashboardData, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [workspace]);
 
   const handleRunAgent = async (e?: React.FormEvent, customPrompt?: string) => {
     if (e) e.preventDefault();
@@ -67,9 +90,14 @@ export default function App() {
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': `run_${Date.now()}`,
-          'X-Demo-Session': 'demo-session-token-allowance-hackathon-2026'
+          'X-Demo-Session': 'demo-session-token-allowance-hackathon-2026',
+          'X-Workspace': workspace
         },
-        body: JSON.stringify({ user_prompt: activePrompt, agent_id: 'default' })
+        body: JSON.stringify({ 
+          user_prompt: activePrompt, 
+          agent_id: workspace === 'personal' ? 'agent_personal' : 'default',
+          workspace
+        })
       });
 
       if (res.ok) {
@@ -122,14 +150,19 @@ export default function App() {
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'X-Admin-Token': adminToken }
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Admin-Token': adminToken,
+          'X-Workspace': workspace
+        },
+        body: JSON.stringify({ workspace, agent_id: workspace === 'personal' ? 'agent_personal' : 'default' })
       });
       if (res.ok) {
         setNotification({
           type: targetState ? 'error' : 'success',
           title: targetState ? 'Emergency Freeze Activated' : 'Emergency Freeze Deactivated',
           desc: targetState 
-            ? 'Rule R0 enforced: all AI agent transactions are immediately blocked.' 
+            ? 'Rule R0 enforced: all AI agent transactions are immediately blocked. In-flight captures swept.' 
             : 'Normal autonomous purchasing operations resumed.'
         });
         await fetchDashboardData();
@@ -137,6 +170,31 @@ export default function App() {
     } catch (err) {
       console.error('Failed to toggle freeze', err);
       await fetchDashboardData();
+    }
+  };
+
+  const handleReconcile = async () => {
+    try {
+      const res = await fetch('/api/reconcile', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Admin-Token': adminToken,
+          'X-Workspace': workspace
+        },
+        body: JSON.stringify({ workspace, agent_id: workspace === 'personal' ? 'agent_personal' : 'default' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotification({
+          type: 'info',
+          title: 'Reconciliation Pass Completed',
+          desc: `Swept ${data.count} unresolved transactions against PayPal Orders v2 for ${workspace === 'personal' ? 'Personal' : 'Demo Organization'} profile.`
+        });
+        await fetchDashboardData();
+      }
+    } catch (err) {
+      console.error('Failed to trigger reconciliation', err);
     }
   };
 
@@ -378,8 +436,17 @@ export default function App() {
             <div className="w-6 h-6 rounded bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600">
               <Building2 className="w-3.5 h-3.5" />
             </div>
-            <span className="font-bold text-slate-900">Demo Organization</span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            <div className="relative flex items-center">
+              <select
+                value={workspace}
+                onChange={(e) => setWorkspace(e.target.value as Workspace)}
+                className="font-bold text-slate-900 bg-transparent border-0 focus:ring-0 cursor-pointer pr-5 py-0 text-xs appearance-none font-sans"
+              >
+                <option value="organization">Demo Organization</option>
+                <option value="personal">Personal Edition ($100 budget)</option>
+              </select>
+              <ChevronDown className="w-3 h-3 text-slate-400 pointer-events-none absolute right-0" />
+            </div>
             <span className="text-slate-400">/</span>
             <span className="text-slate-600 font-medium capitalize">{activeNav}</span>
           </div>
@@ -544,6 +611,13 @@ export default function App() {
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-slate-400"></span>
                     <span>Unresolved captures <strong className="tabular-nums font-mono">${(unresolvedCents / 100).toFixed(2)}</strong></span>
+                    <button 
+                      onClick={handleReconcile}
+                      title="Sweep & reconcile unresolved captures against PayPal"
+                      className="ml-1 text-slate-400 hover:text-slate-700 transition"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
               </div>

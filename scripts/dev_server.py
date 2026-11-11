@@ -14,11 +14,14 @@ import threading
 import time
 import uuid
 import urllib.parse
+import hmac
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("allowance.dev_server")
+
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "dev-secret-admin-token-min-32-chars-long-abc-123")
 
 # Add repo root to path
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -34,7 +37,10 @@ from backend.app.orchestrator.core import (
     create_paypal_order_for_purchase,
     approve_pending_purchase,
 )
-from backend.app.orchestrator.capture_lifecycle import execute_capture_flow
+from backend.app.orchestrator.capture_lifecycle import (
+    execute_capture_flow,
+    execute_read_only_reconciliation,
+)
 from backend.app.paypal.client import MockPayPalClient
 from backend.app.policy.rules import Outcome
 from backend.app.orchestrator.state_machine import PurchaseState
@@ -89,6 +95,29 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(401, {"detail": str(e)})
             return None
 
+    def _require_admin(self) -> bool:
+        token = self.headers.get("X-Admin-Token")
+        if not token:
+            auth = self.headers.get("Authorization", "")
+            if auth.startswith("Bearer "):
+                token = auth[7:]
+        if not token or not hmac.compare_digest(token.strip().encode("utf-8"), ADMIN_TOKEN.strip().encode("utf-8")):
+            self._send_json(403, {"detail": "Forbidden: valid X-Admin-Token or Bearer admin token required."})
+            return False
+        return True
+
+    def _get_workspace_agent(self, parsed, payload=None) -> str:
+        query = urllib.parse.parse_qs(parsed.query)
+        workspace = (
+            (payload or {}).get("workspace")
+            or (payload or {}).get("agent_id")
+            or self.headers.get("X-Workspace")
+            or query.get("workspace", [None])[0]
+            or query.get("agent_id", [None])[0]
+            or "organization"
+        )
+        return "agent_personal" if workspace in ("personal", "agent_personal") else "default"
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -141,8 +170,9 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                 return self._send_json(e.status_code, {"detail": e.detail})
 
         if path == "/api/policy":
+            agent_id = self._get_workspace_agent(parsed)
             conn = get_thread_connection()
-            pol = get_agent_policy(conn, "default")
+            pol = get_agent_policy(conn, agent_id)
             if not pol:
                 return self._send_json(404, {"detail": "Policy not found"})
             return self._send_json(200, {
@@ -158,10 +188,11 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
             })
 
         if path == "/api/budget":
+            agent_id = self._get_workspace_agent(parsed)
             conn = get_thread_connection()
             from datetime import datetime, timezone
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            snap = get_budget_snapshot(conn, "default", today)
+            snap = get_budget_snapshot(conn, agent_id, today)
             return self._send_json(200, {
                 "agent_id": snap.agent_id,
                 "budget_day": snap.budget_day,
@@ -174,8 +205,9 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
             })
 
         if path == "/api/purchases":
+            agent_id = self._get_workspace_agent(parsed)
             conn = get_thread_connection()
-            cur = conn.execute("SELECT * FROM purchases ORDER BY created_at DESC LIMIT 50;")
+            cur = conn.execute("SELECT * FROM purchases WHERE agent_id = ? ORDER BY created_at DESC LIMIT 50;", (agent_id,))
             rows = cur.fetchall()
             purchases = []
             for r in rows:
@@ -209,8 +241,9 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
             return self._send_json(200, purchases)
 
         if path == "/api/ledger":
+            agent_id = self._get_workspace_agent(parsed)
             conn = get_thread_connection()
-            cur = conn.execute("SELECT * FROM ledger ORDER BY created_at DESC LIMIT 100;")
+            cur = conn.execute("SELECT * FROM ledger WHERE agent_id = ? ORDER BY created_at DESC LIMIT 100;", (agent_id,))
             rows = cur.fetchall()
             ledger = []
             for r in rows:
@@ -314,32 +347,55 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                 return self._send_json(e.status_code, {"detail": e.detail})
 
         if path == "/api/demo/reset":
+            if not self._require_admin():
+                return
             from backend.app.db.connection import close_thread_connection
             close_thread_connection()
-            for p in ("allowance.db", "allowance.db-wal", "allowance.db-shm"):
-                if os.path.exists(p):
-                    try:
-                        os.remove(p)
-                    except OSError:
-                        pass
-            seed_database("allowance.db")
+            seed_database("allowance.db", reset=True)
             return self._send_json(200, {"status": "ok", "message": "Demo database freshly seeded."})
 
         if path == "/api/freeze":
+            if not self._require_admin():
+                return
+            agent_id = self._get_workspace_agent(parsed, payload)
             conn = get_thread_connection()
             now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             with conn:
-                conn.execute("UPDATE policy SET frozen = 1, updated_at = ? WHERE agent_id = 'default';", (now_iso,))
-            return self._send_json(200, {"agent_id": "default", "frozen": True})
+                conn.execute("UPDATE policy SET frozen = 1, updated_at = ? WHERE agent_id = ?;", (now_iso, agent_id))
+            
+            # Post-freeze sweep: reconcile all in-flight / uncertain purchases immediately
+            cur = conn.execute("SELECT id FROM purchases WHERE agent_id = ? AND status IN ('CAPTURE_UNKNOWN', 'CAPTURING');", (agent_id,))
+            reconciled_ids = []
+            for r in cur.fetchall():
+                execute_read_only_reconciliation(conn, r["id"], mock_paypal)
+                reconciled_ids.append(r["id"])
+            return self._send_json(200, {"agent_id": agent_id, "frozen": True, "reconciled_ids": reconciled_ids})
 
         if path == "/api/unfreeze":
+            if not self._require_admin():
+                return
+            agent_id = self._get_workspace_agent(parsed, payload)
             conn = get_thread_connection()
             now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             with conn:
-                conn.execute("UPDATE policy SET frozen = 0, updated_at = ? WHERE agent_id = 'default';", (now_iso,))
-            return self._send_json(200, {"agent_id": "default", "frozen": False})
+                conn.execute("UPDATE policy SET frozen = 0, updated_at = ? WHERE agent_id = ?;", (now_iso, agent_id))
+            return self._send_json(200, {"agent_id": agent_id, "frozen": False})
+
+        if path == "/api/reconcile":
+            if not self._require_admin():
+                return
+            agent_id = self._get_workspace_agent(parsed, payload)
+            conn = get_thread_connection()
+            cur = conn.execute("SELECT id FROM purchases WHERE agent_id = ? AND status IN ('CAPTURE_UNKNOWN', 'CAPTURING');", (agent_id,))
+            reconciled = []
+            for r in cur.fetchall():
+                st, det = execute_read_only_reconciliation(conn, r["id"], mock_paypal)
+                reconciled.append({"id": r["id"], "status": st, "detail": det})
+            return self._send_json(200, {"agent_id": agent_id, "reconciled": reconciled, "count": len(reconciled)})
 
         if path.startswith("/api/purchases/") and path.endswith("/approve"):
+            if not self._require_admin():
+                return
             purchase_id = path.split("/")[3]
             conn = get_thread_connection()
             try:
@@ -359,7 +415,8 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
 
         if path == "/api/agent/run":
             prompt = payload.get("user_prompt", "")
-            agent_id = payload.get("agent_id", "default")
+            agent_id = payload.get("agent_id") or self._get_workspace_agent(parsed, payload)
+            tenant_id = "tenant_personal" if agent_id == "agent_personal" else "tenant_demo"
             run_id = str(uuid.uuid4())
             now = time.time()
             now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
@@ -369,9 +426,9 @@ class AllowanceRequestHandler(SimpleHTTPRequestHandler):
                 conn.execute(
                     """
                     INSERT INTO agent_runs (id, tenant_id, agent_id, idempotency_key, request_hash, queued_at, status, created_at)
-                    VALUES (?, 'tenant_demo', ?, ?, ?, ?, 'RUNNING', ?);
+                    VALUES (?, ?, ?, ?, ?, ?, 'RUNNING', ?);
                     """,
-                    (run_id, agent_id, f"key_{run_id}", str(hash(prompt)), now, now_iso)
+                    (run_id, tenant_id, agent_id, f"key_{run_id}", str(hash(prompt)), now, now_iso)
                 )
 
             # Process run synchronously so UI gets immediate authoritative outcome

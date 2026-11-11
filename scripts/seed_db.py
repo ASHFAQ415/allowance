@@ -17,23 +17,10 @@ from backend.app.db.connection import create_connection, init_db
 
 
 def seed_database(db_path: str = "allowance.db", reset: bool = False):
-    if reset:
+    if reset and os.path.exists(db_path):
         print(f"Resetting database at: {db_path}...")
-        removed = True
-        for ext in ["", "-wal", "-shm"]:
-            f = f"{db_path}{ext}"
-            if os.path.exists(f):
-                try:
-                    os.remove(f)
-                    print(f"  Removed: {f}")
-                except OSError as e:
-                    removed = False
-                    print(f"  File {f} held by running process: {e}")
-
-        # If file could not be removed directly (e.g. running dev server on Windows),
-        # wipe all tables in-place so demo returns to clean state
-        if not removed and os.path.exists(db_path):
-            print("  Performing in-place schema drop and re-creation...")
+        try:
+            # In-place clean wipe avoids Windows file-lock collision (WinError 32)
             clean_conn = create_connection(db_path)
             try:
                 clean_conn.execute("PRAGMA foreign_keys = OFF;")
@@ -43,10 +30,24 @@ def seed_database(db_path: str = "allowance.db", reset: bool = False):
                 tables = [r[0] for r in clean_conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';").fetchall()]
                 for t in tables:
                     clean_conn.execute(f"DROP TABLE IF EXISTS {t};")
+                # Reset autoincrement sequence if present
+                has_seq = clean_conn.execute("SELECT 1 FROM sqlite_master WHERE name='sqlite_sequence';").fetchone()
+                if has_seq:
+                    clean_conn.execute("DELETE FROM sqlite_sequence;")
                 clean_conn.commit()
                 clean_conn.execute("PRAGMA foreign_keys = ON;")
+                print("  In-place database reset successful (zero file lock collision).")
             finally:
                 clean_conn.close()
+        except Exception as e:
+            print(f"  In-place reset fallback: {e}")
+            for ext in ["", "-wal", "-shm"]:
+                f = f"{db_path}{ext}"
+                if os.path.exists(f):
+                    try:
+                        os.remove(f)
+                    except OSError:
+                        pass
 
     print(f"Initializing database at: {db_path}...")
     init_db(db_path)
