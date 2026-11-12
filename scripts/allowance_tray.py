@@ -51,7 +51,9 @@ def enable_startup():
     if getattr(sys, "frozen", False):
         cmd = f'"{sys.executable}"'
     else:
-        cmd = f'"{sys.executable}" "{os.path.abspath(__file__)}"'
+        pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+        exe = pyw if os.path.exists(pyw) else sys.executable
+        cmd = f'"{exe}" "{os.path.abspath(__file__)}"'
     try:
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _startup_key(), 0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, cmd)
@@ -109,15 +111,39 @@ def _post(path, body=None, token=None):
         return {"error": str(e)}
 
 def fetch_budget():
-    data = _get(f"/v1/budget")
+    data = _get("/v1/budget")
+    if isinstance(data, dict) and ("error" in data or "detail" in data):
+        # Fallback to dev_server /api routes
+        b = _get("/api/budget")
+        if isinstance(b, dict) and "error" in b:
+            return b
+        p = _get("/api/policy")
+        daily = p.get("daily_budget_cents", 10000) if isinstance(p, dict) else 10000
+        captured = b.get("captured_cents", 0) if isinstance(b, dict) else 0
+        reserved = b.get("reserved_cents", 0) if isinstance(b, dict) else 0
+        unresolved = b.get("unresolved_cents", 0) if isinstance(b, dict) else 0
+        committed = captured + reserved + unresolved
+        avail = max(0, daily - committed)
+        return {
+            "budget_cents": daily,
+            "captured_cents": captured,
+            "reserved_cents": reserved,
+            "available_cents": avail,
+            "frozen": p.get("frozen", False) if isinstance(p, dict) else False,
+        }
     return data
 
 def fetch_purchases():
-    data = _get(f"/v1/purchases?limit=5")
+    data = _get("/v1/purchases?limit=5")
+    if not isinstance(data, list) or len(data) == 0:
+        data = _get("/api/purchases")
     return data if isinstance(data, list) else []
 
 def run_agent(prompt):
-    return _post(f"/v1/agent/run", {"prompt": prompt})
+    res = _post("/v1/agent/run", {"prompt": prompt})
+    if isinstance(res, dict) and ("error" in res or "detail" in res):
+        res = _post("/api/agent/run", {"prompt": prompt})
+    return res
 
 # ─── Tray icon generator ──────────────────────────────────────────────────────
 def _make_icon(color="#6C63FF", label="A"):
@@ -316,7 +342,7 @@ class AllowanceDashboard:
 
     def _open_browser(self):
         import subprocess
-        subprocess.Popen(["start", f"{BACKEND.replace('8000','5173')}"], shell=True)
+        subprocess.Popen(f'start "" "{BACKEND}"', shell=True)
 
     def _toggle_startup(self):
         if startup_enabled():
@@ -375,7 +401,11 @@ class AllowanceTray:
 
     def _quit(self, icon=None, item=None):
         if self.icon:
-            self.icon.stop()
+            try:
+                self.icon.stop()
+            except Exception:
+                pass
+        self.dashboard.root.quit()
         self.dashboard.root.destroy()
         sys.exit(0)
 
@@ -390,11 +420,13 @@ class AllowanceTray:
         self.icon = pystray.Icon(
             APP_NAME, img, APP_LABEL, menu=self._build_menu()
         )
-        # Run tray in background thread, Tkinter in main
-        t = threading.Thread(target=self.icon.run, daemon=True)
-        t.start()
+        try:
+            self.icon.run_detached()
+        except Exception as e:
+            print(f"[tray] run_detached error: {e}")
+
         # Show dashboard immediately on first launch
-        self.dashboard.root.after(500, self.dashboard.show)
+        self.dashboard.root.after(300, self.dashboard.show)
         self.dashboard.run()      # blocks here (Tk mainloop)
 
 
