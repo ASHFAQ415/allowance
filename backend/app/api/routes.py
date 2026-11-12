@@ -5,7 +5,6 @@ Enforces Invariant 6, Tenant Scoping, DTO Allowlists, and Constant-time Token Va
 
 import hashlib
 import json
-import sqlite3
 import time
 import uuid
 from typing import List, Optional
@@ -59,8 +58,6 @@ from .dto import (
     PublicLedgerDTO,
     PublicPolicyDTO,
     PublicAgentRunDTO,
-    PublicEventDTO,
-    AdminPurchaseDetailDTO,
     AdminApprovalLinkDTO,
     RunAgentRequest,
     UpdatePolicyRequest,

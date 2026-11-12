@@ -331,7 +331,6 @@ allowance/
 ├── LICENSE                                 <-- Official MIT Open Source License
 ├── render.yaml                             <-- Render Cloud Deployment Blueprint (IaaS)
 ├── run.bat                                 <-- One-click Windows launch script
-├── project_status_report.md                <-- Living engineering report & contributor guide
 └── README.md                               <-- THIS FILE
 ```
 
